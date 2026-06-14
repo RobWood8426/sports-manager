@@ -1,0 +1,80 @@
+{:paths ["src" "resources"]
+
+ ;; Datomic Pro is published to the my.datomic.com repo, not Central. Resolving
+ ;; com.datomic/peer requires license credentials — put them in
+ ;; ~/.clojure/deps.edn (or the DATOMIC_* env) per docs/datomic.md.
+ :mvn/repos
+ {"my.datomic.com" {:url "https://my.datomic.com/repo"}}
+
+ :deps
+ {org.clojure/clojure        {:mvn/version "1.12.0"}
+
+  ;; --- HTTP server ---
+  ring/ring-core             {:mvn/version "1.12.2"}
+  ring/ring-jetty-adapter    {:mvn/version "1.12.2"}
+  ring/ring-defaults         {:mvn/version "0.5.0"}
+  metosin/reitit-ring        {:mvn/version "0.7.2"}
+
+  ;; --- HTML (HTMX-friendly server-rendered pages) ---
+  hiccup/hiccup              {:mvn/version "2.0.0-RC3"}
+
+  ;; --- Database (Datomic Pro peer; mem:// for dev/test, SQL transactor in prod) ---
+  ;; Matches the stub-server setup. Resolving com.datomic/peer needs the
+  ;; my.datomic.com Maven repo (configured below) + license creds. See docs/datomic.md.
+  com.datomic/peer           {:mvn/version "1.0.7469"}
+
+  ;; --- Auth (Firebase Admin SDK for ID-token verification; buddy for cookie signing) ---
+  com.google.firebase/firebase-admin {:mvn/version "9.2.0"}
+  buddy/buddy-sign           {:mvn/version "3.5.351"}
+
+  ;; --- REPL (embedded nREPL so clojure-mcp can attach to a running server) ---
+  nrepl/nrepl                {:mvn/version "1.3.0"}
+
+  ;; --- QR code generation (SPO-29) ---
+  com.google.zxing/core      {:mvn/version "3.5.3"}
+  com.google.zxing/javase    {:mvn/version "3.5.3"}
+
+  ;; --- CSV import (SPO-38) ---
+  org.clojure/data.csv       {:mvn/version "1.1.0"}
+
+  ;; --- Config / logging ---
+  org.clojure/tools.logging  {:mvn/version "1.3.0"}
+  ch.qos.logback/logback-classic {:mvn/version "1.5.6"}
+  net.logstash.logback/logstash-logback-encoder {:mvn/version "8.0"}}
+
+ :aliases
+ {;; Start the web server: clojure -M:run   (or use scripts/start.sh)
+  :run
+  {:main-opts ["-m" "sports-manager.core"]}
+
+  ;; REPL + embedded nREPL on port 7888 so clojure-mcp can attach.
+  ;; This is the alias the dev scripts use.
+  :dev
+  {:extra-paths ["test" "dev"]
+   :extra-deps  {cider/cider-nrepl {:mvn/version "0.50.2"}
+                 ring/ring-devel   {:mvn/version "1.12.2"}}
+   :main-opts   ["-m" "nrepl.cmdline"
+                 "--middleware" "[cider.nrepl/cider-middleware]"
+                 "--port" "7888"]}
+
+  ;; clojure-mcp server. Connects to the nREPL started by :dev (port 7888).
+  ;; Run in a second terminal:  clojure -X:mcp
+  :mcp
+  {:extra-deps {org.slf4j/slf4j-nop {:mvn/version "2.0.16"}
+                com.bhauman/clojure-mcp
+                {:git/url "https://github.com/bhauman/clojure-mcp.git"
+                 :git/tag "v0.3.1"
+                 :git/sha "81005ce"}}
+   :exec-fn   clojure-mcp.main/start-mcp-server
+   :exec-args {:port 7888}}
+
+  ;; Tests: clojure -M:test
+  :test
+  {:extra-paths ["test"]
+   :extra-deps  {lambdaisland/kaocha {:mvn/version "1.91.1392"}}
+   :main-opts   ["-m" "kaocha.runner"]}
+
+  ;; Linting: clojure -M:lint
+  :lint
+  {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}
+   :main-opts    ["-m" "clj-kondo.main" "--lint" "src" "test"]}}}

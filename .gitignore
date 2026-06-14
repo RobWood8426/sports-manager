@@ -1,0 +1,22 @@
+/.cpcache/
+/.clj-kondo/.cache/
+/.lsp/
+/target/
+/classes/
+.nrepl-port
+*.log
+.DS_Store
+.clojure-mcp/scratch_pad.edn
+
+# Local secrets / config — never commit
+.env
+/.secrets/
+.mcp.json
+
+# Datomic transactor data (Docker volume mounts)
+/.datomic-data/
+/.datomic-log/
+
+# Datomic distribution (symlinked or downloaded for Docker build)
+/datomic-pro-*/
+datomic-pro*.zip

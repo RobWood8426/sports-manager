@@ -1,0 +1,20 @@
+services:
+  datomic-transactor:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.datomic
+    container_name: sports-manager-datomic-transactor
+    ports:
+      - "4334:4334"
+      - "4335:4335"
+    volumes:
+      - ./.datomic-data:/data
+      - ./.datomic-log:/opt/datomic/log
+    environment:
+      - DATOMIC_LICENSE_KEY=${DATOMIC_LICENSE_KEY}
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "4334"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped

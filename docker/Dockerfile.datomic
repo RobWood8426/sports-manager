@@ -1,0 +1,50 @@
+FROM eclipse-temurin:11-jre
+
+# Datomic Pro version
+ENV DATOMIC_VERSION=1.0.7469
+
+# Install dependencies
+RUN apt-get update && \
+    apt-get install -y netcat-openbsd && \
+    rm -rf /var/lib/apt/lists/*
+
+# Create datomic user
+RUN useradd -m -s /bin/bash datomic
+
+# Set up directories
+RUN mkdir -p /opt/datomic /data /opt/datomic/log && \
+    chown -R datomic:datomic /opt/datomic /data
+
+# Switch to datomic user
+USER datomic
+WORKDIR /opt/datomic
+
+# Copy pre-downloaded Datomic distribution
+# You must download this first with: ./download-datomic.sh
+COPY --chown=datomic:datomic datomic-pro-${DATOMIC_VERSION}/ /opt/datomic/
+
+# Create transactor properties file.
+# Sized for a 4GB transactor heap (set via -Xmx in docker/entrypoint.sh).
+# The old 256m memory-index-max on a 1GB heap forced indexing constantly and
+# crash-looped on "Indexing retry limit exceeded" once the dev DB grew; these
+# larger values give indexing room to complete. Kept under heap:
+# memory-index-max(512m) + object-cache-max(1g) well below 4g.
+RUN echo "protocol=dev" > config/transactor.properties && \
+    echo "host=0.0.0.0" >> config/transactor.properties && \
+    echo "port=4334" >> config/transactor.properties && \
+    echo "storage-access=remote" >> config/transactor.properties && \
+    echo "storage-datomic-password=datomic" >> config/transactor.properties && \
+    echo "storage-admin-password=admin" >> config/transactor.properties && \
+    echo "memory-index-threshold=64m" >> config/transactor.properties && \
+    echo "memory-index-max=512m" >> config/transactor.properties && \
+    echo "object-cache-max=1g" >> config/transactor.properties && \
+    echo "data-dir=/data" >> config/transactor.properties && \
+    echo "log-dir=/opt/datomic/log" >> config/transactor.properties
+
+# Copy entrypoint script
+COPY --chown=datomic:datomic docker/entrypoint.sh /opt/datomic/entrypoint.sh
+RUN chmod +x /opt/datomic/entrypoint.sh
+
+EXPOSE 4334 4335
+
+ENTRYPOINT ["/opt/datomic/entrypoint.sh"]
