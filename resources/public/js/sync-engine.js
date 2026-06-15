@@ -10,6 +10,14 @@
 
 import { enqueue, dequeue, getPending } from './score-queue.js';
 
+function randomId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 const statusEl = document.getElementById('sync-status');
 const labelEl  = document.getElementById('sync-label');
 
@@ -48,9 +56,13 @@ function setStatus(state, detail) {
 // ---------------------------------------------------------------------------
 
 async function sendEvent(fields) {
-  const body = new FormData();
+  const body = new URLSearchParams();
   Object.entries(fields).forEach(([k, v]) => body.append(k, v));
-  const res = await fetch(eventUrl, { method: 'POST', body });
+  const res = await fetch(eventUrl, {
+    method: 'POST',
+    body,
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
   return res.json();
 }
@@ -112,33 +124,37 @@ function interceptForms() {
   document.querySelectorAll('form[action="' + eventUrl + '"]').forEach((form) => {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const data = new FormData(form);
-      const fields = Object.fromEntries(data.entries());
-      const clientId = crypto.randomUUID();
-      const clientTs = new Date().toISOString();
-      fields['client-id'] = clientId;
-      fields['client-ts'] = clientTs;
-
-      if (!navigator.onLine) {
-        setStatus('offline');
-        await enqueue({ clientId, clientTs, url: eventUrl, method: 'POST', fields });
-        return;
-      }
-
-      setStatus('syncing');
       try {
-        const result = await sendEvent(fields);
-        if (result.status === 'ok') {
-          setStatus(result.conflictDetected ? 'conflict' : 'synced');
-          // Reload to reflect updated score
-          window.location.reload();
-        } else {
-          setStatus('failed');
+        const data = new FormData(form);
+        const fields = Object.fromEntries(data.entries());
+        const clientId = randomId();
+        const clientTs = new Date().toISOString();
+        fields['client-id'] = clientId;
+        fields['client-ts'] = clientTs;
+
+        if (!navigator.onLine) {
+          setStatus('offline');
+          await enqueue({ clientId, clientTs, url: eventUrl, method: 'POST', fields });
+          return;
+        }
+
+        setStatus('syncing');
+        try {
+          const result = await sendEvent(fields);
+          if (result.status === 'ok') {
+            setStatus(result.conflictDetected ? 'conflict' : 'synced');
+            window.location.reload();
+          } else {
+            setStatus('failed');
+            await enqueue({ clientId, clientTs, url: eventUrl, method: 'POST', fields });
+          }
+        } catch (_) {
+          setStatus('offline');
           await enqueue({ clientId, clientTs, url: eventUrl, method: 'POST', fields });
         }
       } catch (_) {
-        setStatus('offline');
-        await enqueue({ clientId, clientTs, url: eventUrl, method: 'POST', fields });
+        // JS failed entirely — fall back to native form POST
+        form.submit();
       }
     });
   });

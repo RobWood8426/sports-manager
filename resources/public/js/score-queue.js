@@ -10,6 +10,14 @@
  *   getPending()     → Promise<event[]>
  */
 
+function randomId() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 const DB_NAME = 'schoolscore';
 const DB_VERSION = 1;
 const STORE = 'score-queue';
@@ -35,7 +43,7 @@ function openDb() {
 export async function enqueue(event) {
   const db = await openDb();
   const entry = {
-    clientId: event.clientId || crypto.randomUUID(),
+    clientId: event.clientId || randomId(),
     clientTs: event.clientTs || new Date().toISOString(),
     ...event,
   };

@@ -23,8 +23,7 @@
       (into [:main] body)]])))
 
 (defn doc-public
-  "Full HTML document for public (unauthenticated) pages — no admin header.
-  Includes PWA manifest and service worker registration."
+  "Full HTML document for public (unauthenticated) pages — no admin header."
   [title & body]
   (str
    "<!DOCTYPE html>"
@@ -40,12 +39,7 @@
       [:link {:rel "manifest" :href "/manifest.json"}]
       [:meta {:name "theme-color" :content "#1a56db"}]]
      [:body
-      (into [:main.p-6.max-w-xl.mx-auto] body)
-      [:script
-       (h/raw
-        "if ('serviceWorker' in navigator) {
-           navigator.serviceWorker.register('/sw.js').catch(function(){});
-         }")]]])))
+      (into [:main.p-6.max-w-xl.mx-auto] body)]])))
 
 (defn csrf-field
   "Hidden input carrying the CSRF token. Include once inside every POST form."
@@ -83,6 +77,90 @@
             [:div {:class (str "alert " alert-class " shadow-lg")}
              [:span message]]]])
          "<script>setTimeout(()=>{let t=document.getElementById('toast');if(t)t.innerHTML='';},3000)</script>")))
+
+(defn event-status-badge
+  "DaisyUI badge hiccup for an event status keyword."
+  [status]
+  (let [s (name status)
+        cls (case s
+              "published" "badge-success"
+              "draft"     "badge-neutral"
+              "cancelled" "badge-ghost"
+              "badge-outline")]
+    [:span.badge.badge-sm {:class cls} s]))
+
+(defn fixture-status-badge
+  "DaisyUI badge hiccup for a fixture status keyword."
+  [status]
+  (let [s (name status)
+        cls (case s
+              "published" "badge-success"
+              "draft"     "badge-neutral"
+              "cancelled" "badge-ghost"
+              "badge-outline")]
+    [:span.badge.badge-sm {:class cls} s]))
+
+(defn participant-status-badge
+  "DaisyUI badge hiccup for a participant status keyword."
+  [status]
+  (let [s (name status)
+        cls (case s
+              "confirmed"  "badge-success"
+              "invited"    "badge-warning"
+              "withdrawn"  "badge-error"
+              "badge-outline")]
+    [:span.badge.badge-sm {:class cls} s]))
+
+(defn scode-status-badge
+  "DaisyUI badge hiccup for a scorekeeper code status keyword."
+  [status]
+  (let [s (name status)
+        cls (case s
+              "active"  "badge-success"
+              "used"    "badge-info"
+              "revoked" "badge-ghost"
+              "expired" "badge-ghost"
+              "badge-outline")]
+    [:span.badge.badge-sm {:class cls} s]))
+
+(defn final-score-status-badge
+  "DaisyUI badge hiccup for a final-score status keyword."
+  [status]
+  (let [s (name status)
+        cls (case s
+              "accepted" "badge-success"
+              "pending"  "badge-warning"
+              "disputed" "badge-error"
+              "badge-outline")]
+    [:span.badge.badge-sm {:class cls} s]))
+
+(defn dashboard-bucket-badge
+  "DaisyUI badge hiccup for a dashboard bucket keyword."
+  [bucket label]
+  (let [cls (case bucket
+              :live        "badge-success"
+              :disputed    "badge-error"
+              :pending     "badge-warning"
+              :completed   "badge-info"
+              :no-activity "badge-ghost"
+              "badge-outline")]
+    [:span.badge.badge-sm {:class cls} label]))
+
+(defn fixture-status-label
+  "Human-readable label and colour class for a public-facing fixture, given its
+  live score map (with :fixture/final-score-status, :fixture/start-at, :fixture/end-at)."
+  [f]
+  (let [now (java.util.Date.)
+        end   (:fixture/end-at f)
+        start (:fixture/start-at f)
+        fs    (:fixture/final-score-status f)]
+    (cond
+      (#{:final-score.status/accepted} fs) ["Final"    "text-success font-semibold"]
+      (#{:final-score.status/disputed} fs) ["Disputed" "text-error font-semibold"]
+      (#{:final-score.status/pending}  fs) ["Pending"  "text-warning font-semibold"]
+      (and end (.before end now))          ["Ended"    "opacity-50"]
+      (and start (.before start now))      ["Live"     "text-success font-semibold"]
+      :else                                ["Upcoming" "opacity-50"])))
 
 (defn error-page
   "Generic error page. `status` is the HTTP status code, `message` is human-readable."

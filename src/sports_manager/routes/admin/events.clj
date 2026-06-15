@@ -7,6 +7,7 @@
             [sports-manager.fixture :as fixture]
             [sports-manager.participant :as participant]
             [sports-manager.routes.shared :as shared]
+            [sports-manager.scorekeeper-code :as scode]
             [sports-manager.sport-template :as sport-template]
             [sports-manager.team :as team]
             [sports-manager.venue :as venue]
@@ -67,18 +68,28 @@
                                  :venue (get qp "venue")
                                  :status (get qp "status")
                                  :date (get qp "date")}
+                new-code (get qp "new-code")
+                new-code-fixture (some-> (get qp "new-code-fixture") parse-uuid)
                 participants (participant/list-by-event event-id)
                 all-fixtures (fixture/list-by-event event-id)
                 fixtures (fixture/filter-fixtures all-fixtures fixture-filters)
                 sport-configs (event-sport/list-by-event event-id)
                 venues (venue/list-by-event event-id)
                 teams (team/list-by-event event-id)
-                sports (event-detail-sports ev)]
+                sports (event-detail-sports ev)
+                codes-by-fixture (into {}
+                                       (map (fn [f]
+                                              [(:fixture/id f)
+                                               (scode/list-by-fixture (:fixture/id f))]))
+                                       all-fixtures)]
             (shared/html (views.events/event-detail ev participants fixtures sports
                                                     {:fixture-filters fixture-filters
                                                      :sport-configs sport-configs
                                                      :venues venues
-                                                     :teams teams}))))))))
+                                                     :teams teams
+                                                     :codes-by-fixture codes-by-fixture
+                                                     :new-code new-code
+                                                     :new-code-fixture-id new-code-fixture}))))))))
 
 (defn dashboard-page [request]
   (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
@@ -128,7 +139,7 @@
             (resp/redirect (str "/events/" event-id))))))))
 
 (defn event-qr
-  "GET /events/:id/qr — return the event QR code as a downloadable PNG."
+  "GET /events/:id/qr — render an HTML page with the event QR code and details."
   [request]
   (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
     (if-not tenant-id
@@ -137,12 +148,12 @@
             ev (when event-id (event/find-by-id event-id))]
         (if-not ev
           {:status 404 :body "Event not found"}
-          (let [png (event/qr-png ev)]
-            (-> (resp/response (java.io.ByteArrayInputStream. png))
-                (resp/content-type "image/png")
-                (resp/header "Content-Disposition"
-                             (str "attachment; filename=\"event-" (:event/code ev) ".png\""))
-                (resp/header "Content-Length" (str (alength png))))))))))
+          (let [spectator-url (str (shared/request->base-url request) "/e/" (:event/code ev))
+                png (event/qr-png-for-text spectator-url)
+                b64 (.encodeToString (java.util.Base64/getEncoder) png)
+                fmt (java.text.SimpleDateFormat. "d MMM yyyy")]
+            (shared/html
+             (views.events/event-qr-page ev spectator-url b64 fmt))))))))
 
 (defn participant-add
   "POST /events/:id/participants — add a participating school."

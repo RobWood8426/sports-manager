@@ -29,31 +29,6 @@
                                    :or {filters {} sports []}}]]
   (let [fmt (java.text.SimpleDateFormat. "d MMM HH:mm")
         date-fmt (java.text.SimpleDateFormat. "d MMM yyyy")
-        now (java.util.Date.)
-        fixture-status-label
-        (fn [f]
-          (let [end (:fixture/end-at f)
-                start (:fixture/start-at f)
-                fs (:fixture/final-score-status f)]
-            (cond
-              (#{:final-score.status/accepted} fs) "Final"
-              (#{:final-score.status/disputed} fs) "Disputed"
-              (#{:final-score.status/pending} fs) "Pending"
-              (and end (.before end now)) "Ended"
-              (and start (.before start now)) "Live"
-              :else "Upcoming")))
-        fixture-status-class
-        (fn [f]
-          (let [end (:fixture/end-at f)
-                start (:fixture/start-at f)
-                fs (:fixture/final-score-status f)]
-            (cond
-              (#{:final-score.status/accepted} fs) "text-success font-semibold"
-              (#{:final-score.status/disputed} fs) "text-warning font-semibold"
-              (#{:final-score.status/pending} fs) "text-warning font-semibold"
-              (and end (.before end now)) "text-warning font-semibold"
-              (and start (.before start now)) "text-success font-semibold"
-              :else "text-warning font-semibold")))
         sport-filter (get filters :sport-code "")
         team-filter (get filters :team-name "")]
     (shared/doc-public (str (:event/name event) " — Sports Manager")
@@ -88,8 +63,7 @@
                                    a-name (get-in f [:fixture/team-a :participant/name] "TBA")
                                    b-name (get-in f [:fixture/team-b :participant/name] "TBA")
                                    sport (get-in f [:fixture/sport-template :sport-template/name])
-                                   lbl (fixture-status-label f)
-                                   cls (fixture-status-class f)
+                                   [lbl cls] (shared/fixture-status-label f)
                                    href (str "/e/fixture/" (:fixture/id f))]
                                [:a.no-underline.text-inherit.block {:href href}
                                 [:div.bg-base-100.border.border-base-300.rounded-lg.p-3
@@ -136,26 +110,18 @@
         a-name (get-in fixture [:fixture/team-a :participant/name] "Team A")
         b-name (get-in fixture [:fixture/team-b :participant/name] "Team B")
         sport (get-in fixture [:fixture/sport-template :sport-template/name])
-        end (:fixture/end-at fixture)
         start (:fixture/start-at fixture)
-        status-label (cond
-                       (= :final-score.status/accepted final-status) "Final"
-                       (= :final-score.status/disputed final-status) "Disputed"
-                       (= :final-score.status/pending final-status) "Pending"
-                       (and end (.before end now)) "Ended"
-                       (and start (.before start now)) "Live"
-                       :else "Upcoming")
-        is-live? (and (nil? final-status)
-                      start (.before start now)
-                      (or (nil? end) (.after end now)))]
+        [status-label status-cls] (shared/fixture-status-label fixture)
+        should-poll? (nil? final-status)]
     (shared/doc-public (str a-name " vs " b-name " — SchoolScore")
                        [:div.max-w-lg.mx-auto
                         [:p.text-sm.text-gray-500.mb-2
                          sport
                          (when-let [v (:fixture/venue fixture)] (str " · " v))
                          (when start (str " · " (.format fmt start)))]
-                        [:div#fixture-status.badge.badge-outline.mb-5 status-label]
+                        [:div#fixture-status.mb-5 {:class (str "badge badge-outline " status-cls)} status-label]
                         [:div#score-display.flex.items-center.justify-center.gap-6.my-6
+                         {:data-fixture-id fid}
                          [:div.flex-1.text-center
                           [:div.text-sm.text-gray-500.mb-1 a-name]
                           [:div#score-a.text-5xl.font-bold.leading-none (or (:a score) 0)]]
@@ -163,10 +129,9 @@
                          [:div.flex-1.text-center
                           [:div.text-sm.text-gray-500.mb-1 b-name]
                           [:div#score-b.text-5xl.font-bold.leading-none (or (:b score) 0)]]]
-                        (when is-live?
+                        (when should-poll?
                           [:p#last-updated.text-xs.text-gray-500.text-center.m-0
                            "Updating live…"])
                         [:p.mt-8.text-xs.text-gray-400.text-center "Powered by Sports Manager"]]
-                       (when is-live?
-                         [:script {:src "/js/spectator-fixture.js" :type "module"
-                                   :data-fixture-id fid}]))))
+                       (when should-poll?
+                         [:script {:src "/js/spectator-fixture.js" :type "module"}]))))

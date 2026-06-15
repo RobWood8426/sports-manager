@@ -3,7 +3,6 @@
   (:require [clojure.string :as str]
             [ring.util.response :as resp]
             [sports-manager.audit :as audit]
-            [sports-manager.config :as config]
             [sports-manager.event :as event]
             [sports-manager.final-score :as final-score]
             [sports-manager.fixture :as fixture]
@@ -82,7 +81,7 @@
           {:status 404 :body "Not found"}
           (do
             (fixture/publish! fixture-id (:user/firebase-uid current-user))
-            (resp/redirect (str "/events/" event-id))))))))
+            (resp/redirect (str "/events/" event-id "#fixture-" fixture-id))))))))
 
 (defn fixture-code-generate
   "POST /events/:id/fixtures/:fid/codes — generate a new scorekeeper code."
@@ -95,19 +94,10 @@
             fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))]
         (if-not (and event-id fixture-id)
           {:status 404 :body "Not found"}
-          (let [{:keys [code]} (scode/generate! fixture-id (:user/firebase-uid current-user))
-                ev (event/find-by-id event-id)
-                participants (participant/list-by-event event-id)
-                fixtures (fixture/list-by-event event-id)
-                sports (event-detail-sports ev)
-                codes-by-fixture (into {} (map (fn [f]
-                                                 [(:fixture/id f)
-                                                  (scode/list-by-fixture (:fixture/id f))]))
-                                       fixtures)]
-            (shared/html (views.events/event-detail ev participants fixtures sports
-                                                    {:new-code code
-                                                     :new-code-fixture-id fixture-id
-                                                     :codes-by-fixture codes-by-fixture}))))))))
+          (let [{:keys [code]} (scode/generate! fixture-id (:user/firebase-uid current-user))]
+            (resp/redirect (str "/events/" event-id "?new-code=" code
+                                "&new-code-fixture=" fixture-id
+                                "#fixture-" fixture-id))))))))
 
 (defn fixture-code-revoke
   "POST /events/:id/fixtures/:fid/codes/:cid/revoke — revoke a scorekeeper code."
@@ -117,12 +107,13 @@
       user-or-redirect
       (let [current-user user-or-redirect
             event-id (shared/parse-event-id (get-in request [:path-params :id]))
+            fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
             code-id (shared/parse-event-id (get-in request [:path-params :cid]))]
-        (if-not (and event-id code-id)
+        (if-not (and event-id fixture-id code-id)
           {:status 404 :body "Not found"}
           (do
             (scode/revoke! code-id (:user/firebase-uid current-user))
-            (resp/redirect (str "/events/" event-id))))))))
+            (resp/redirect (str "/events/" event-id "#fixture-" fixture-id))))))))
 
 (defn fixture-code-qr
   "GET /events/:id/fixtures/:fid/codes/:cid/qr — QR code PNG for a scorekeeper code URL."
@@ -136,12 +127,11 @@
             sc (when code-id (scode/find-by-id code-id))]
         (if-not (and event-id fixture-id sc)
           {:status 404 :body "Not found"}
-          (let [url (str config/base-url "/score/" fixture-id "/" code-id)
+          (let [url (str (shared/request->base-url request) "/score")
                 png (event/qr-png-for-text url)]
             (-> (resp/response (java.io.ByteArrayInputStream. png))
                 (resp/content-type "image/png")
-                (resp/header "Content-Disposition"
-                             (str "attachment; filename=\"code-" code-id ".png\""))
+                (resp/header "Content-Disposition" "inline")
                 (resp/header "Content-Length" (str (alength png))))))))))
 
 (defn fixture-assign-scorekeeper
@@ -160,7 +150,7 @@
             (scode/assign! fixture-id
                            (if (str/blank? label) "Scorekeeper" label)
                            (:user/firebase-uid current-user))
-            (resp/redirect (str "/events/" event-id))))))))
+            (resp/redirect (str "/events/" event-id "#fixture-" fixture-id))))))))
 
 (defn fixture-comparison-page
   "GET /events/:id/fixtures/:fid/comparison — show two scorekeeper submissions side-by-side."

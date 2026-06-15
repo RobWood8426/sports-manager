@@ -17,12 +17,12 @@
                       :mismatch "Scores do not match"
                       :accepted "Accepted"
                       :disputed "Disputed"}
-        status-class {:match "text-success font-semibold"
-                      :accepted "text-success font-semibold"
-                      :mismatch "text-warning font-semibold"
-                      :disputed "text-warning font-semibold"
-                      :one-pending "text-warning font-semibold"
-                      :no-submissions "text-warning font-semibold"}]
+        status-class {:match          "text-success font-semibold"
+                      :accepted        "text-success font-semibold"
+                      :mismatch        "text-error font-semibold"
+                      :disputed        "text-error font-semibold"
+                      :one-pending     "text-warning font-semibold"
+                      :no-submissions  "opacity-60"}]
     (shared/doc (str "Score Comparison — " (get-in fixture [:fixture/sport-template :sport-template/name]))
                 [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
                  [:p [:a {:href (str "/events/" event-id)} "← Back to event"]]
@@ -41,16 +41,17 @@
                                                  (not match?)
                                                  (#{:final-score.status/pending
                                                     :final-score.status/disputed} s-status))
-                                        "bg-yellow-100")]
+                                        "bg-error/10")]
                         [:tr {:class row-class}
-                         [:td (str (get-in s [:final-score/scode :scode/id]))]
-                         [:td (:final-score/team-a-score s)]
-                         [:td (:final-score/team-b-score s)]
+                         [:td.font-mono.text-xs (str (get-in s [:final-score/scode :scode/id]))]
+                         [:td.font-bold (:final-score/team-a-score s)]
+                         [:td.font-bold (:final-score/team-b-score s)]
                          [:td (when-let [at (:final-score/submitted-at s)] (.format fmt at))]
-                         [:td (name s-status)]]))]]
+                         [:td (shared/final-score-status-badge s-status)]]))]]
                   [:p.text-gray-500 "No submissions yet."])
                 (when (= :disputed status)
-                  [:section.mt-8.rounded-lg.border.border-warning.bg-yellow-50.p-4.space-y-3
+                  [:section.mt-8.rounded-lg.border.border-error.p-4.space-y-3
+                   {:style "background: color-mix(in srgb, oklch(var(--er)) 8%, transparent);"}
                    [:h3 "Resolve dispute"]
                    [:p.text-gray-500 "Override the submitted scores with confirmed values and provide a reason for the record."]
                    (when-let [err (:form resolve-errors)]

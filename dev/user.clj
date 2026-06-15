@@ -3,7 +3,7 @@
   server from a connected REPL / clojure-mcp session."
   (:require [ring.middleware.reload :refer [wrap-reload]]
             [sports-manager.core :as core]
-            [sports-manager.routes :as routes]))
+            [sports-manager.routes.core :as routes]))
 
 (defn go
   "Start the web server with wrap-reload (without joining) so the REPL stays interactive."

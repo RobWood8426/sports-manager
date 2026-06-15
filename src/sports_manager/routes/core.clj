@@ -115,8 +115,9 @@
           (str/starts-with? "application/json")))
 
 (defn- wrap-csrf
-  "Apply CSRF protection, skipping JSON requests (fetch-based API calls)
-  and the logout endpoint (logout-via-CSRF is harmless)."
+  "Apply CSRF protection, skipping JSON requests (fetch-based API calls),
+  the logout endpoint (logout-via-CSRF is harmless), and scorekeeper POST
+  routes (code-gated by scode-id, CSRF adds no value)."
   [handler]
   (let [csrf-error (-> (resp/response (views.shared/error-page 403 "Invalid anti-forgery token. Please go back and try again."))
                        (resp/content-type "text/html; charset=utf-8")
@@ -124,7 +125,8 @@
         protected (wrap-anti-forgery handler {:error-response csrf-error})]
     (fn [request]
       (if (or (json-request? request)
-              (= (:uri request) "/auth/logout"))
+              (= (:uri request) "/auth/logout")
+              (str/starts-with? (:uri request) "/score/"))
         (handler request)
         (protected request)))))
 

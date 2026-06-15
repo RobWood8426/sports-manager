@@ -46,20 +46,15 @@
                 (if (seq events)
                   [:ul.flex.flex-col.gap-3
                    (for [e events]
-                     (let [status (name (:event/status e))
-                           badge-class (case status
-                                         "published" "badge-success"
-                                         "draft" "badge-neutral"
-                                         "badge-outline")]
-                       [:li
-                        [:a.block.rounded-xl.border.border-base-300.bg-base-200.hover:bg-base-300.transition-colors.p-4.no-underline
-                         {:href (str "/events/" (:event/id e))}
-                         [:div.flex.items-center.gap-3
-                          [:span.font-semibold.text-base.flex-1 (:event/name e)]
-                          [:span.badge.badge-sm {:class badge-class} status]
-                          (when-let [d (:event/start-at e)]
-                            [:span.text-xs.opacity-50
-                             (.format (java.text.SimpleDateFormat. "d MMM yyyy") d)])]]]))]
+                     [:li
+                      [:a.block.rounded-xl.border.border-base-300.bg-base-200.hover:bg-base-300.transition-colors.p-4.no-underline
+                       {:href (str "/events/" (:event/id e))}
+                       [:div.flex.items-center.gap-3
+                        [:span.font-semibold.text-base.flex-1 (:event/name e)]
+                        (shared/event-status-badge (:event/status e))
+                        (when-let [d (:event/start-at e)]
+                          [:span.text-xs.opacity-50
+                           (.format (java.text.SimpleDateFormat. "d MMM yyyy") d)])]]])]
                   [:p.opacity-50.text-sm "No events yet. Create your first event above."]))))
 
 (defn users-list
@@ -85,8 +80,7 @@
                  [:div.flex.flex-col.gap-4
                   (for [u (sort-by :user/email tenant-users)]
                     (let [uid (:user/firebase-uid u)
-                          user-roles (into #{} (map :role/name) (:user/roles u))
-                          status (name (or (:user/status u) :active))]
+                          user-roles (into #{} (map :role/name) (:user/roles u))]
                       [:div.rounded-xl.border.border-base-300.bg-base-200.p-4
                        [:div.flex.flex-wrap.items-start.justify-between.gap-3.mb-3
                         [:div
@@ -94,7 +88,7 @@
                            [:div.font-semibold n])
                          [:div.text-sm.opacity-60 (:user/email u)]]
                         [:div.flex.items-center.gap-3
-                         [:span.badge.badge-sm.badge-outline status]
+                         (shared/event-status-badge (or (:user/status u) :active))
                          [:form {:method "post" :action (str "/users/" uid "/remove")}
                           (shared/csrf-field)
                           [:button.btn.btn-sm.btn-error.btn-outline {:type "submit"} "Remove"]]]]

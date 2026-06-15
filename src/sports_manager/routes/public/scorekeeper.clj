@@ -20,8 +20,9 @@
 
 (defn scorekeeper-entry-page
   "GET /score — public code-entry page for scorekeepers."
-  [_request]
-  (shared/html (views.scorekeeper/scorekeeper-code-entry)))
+  [request]
+  (let [prefill (get (:query-params request) "code")]
+    (shared/html (views.scorekeeper/scorekeeper-code-entry {:prefill prefill}))))
 
 (defn scorekeeper-code-submit
   "POST /score — verify the entered code; show confirmation page on success."

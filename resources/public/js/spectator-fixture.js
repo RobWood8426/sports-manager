@@ -6,8 +6,8 @@
  * Stops polling when the server reports a finalStatus.
  */
 
-const scriptEl   = document.currentScript;
-const fixtureId  = scriptEl && scriptEl.dataset.fixtureId;
+const scoreDisplay = document.getElementById('score-display');
+const fixtureId    = scoreDisplay && scoreDisplay.dataset.fixtureId;
 
 const scoreA     = document.getElementById('score-a');
 const scoreB     = document.getElementById('score-b');
@@ -56,6 +56,6 @@ async function poll() {
   }
 }
 
-// Initial fetch immediately, then every 10 s.
+// Initial fetch immediately, then every 3 s.
 poll();
-pollTimer = setInterval(poll, 10_000);
+pollTimer = setInterval(poll, 3_000);

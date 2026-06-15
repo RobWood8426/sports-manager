@@ -133,7 +133,10 @@
                          (str/includes? (str/lower-case haystack)
                                         (str/lower-case needle))))
         sport-kw (when sport-code
-                   (if (keyword? sport-code) sport-code (keyword sport-code)))
+                   (cond
+                     (keyword? sport-code) sport-code
+                     (str/includes? (str sport-code) "/") (keyword sport-code)
+                     (not (str/blank? (str sport-code))) (keyword "sport" (str sport-code))))
         status-kw (when status
                     (if (keyword? status) status (keyword status)))]
     (cond->> fixtures

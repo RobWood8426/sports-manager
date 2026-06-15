@@ -113,7 +113,6 @@
         _ (when-not fix-eid
             (throw (ex-info "Fixture not found" {:fixture/id fixture-id})))
         tenant-eid (d/q '[:find ?t . :in $ ?f :where [?f :fixture/tenant ?t]] db fix-eid)
-        expires-at (d/q '[:find ?e . :in $ ?f :where [?f :fixture/end-at ?e]] db fix-eid)
         plaintext (random-code 8)
         code-hash (sha256-hex plaintext)
         code-id (UUID/randomUUID)
@@ -124,8 +123,7 @@
                   :scode/status :scode.status/active
                   :scode/tenant tenant-eid
                   :scode/created-at now
-                  :scode/created-by actor-uid
-                  :scode/expires-at (or expires-at now)}
+                  :scode/created-by actor-uid}
                  {:audit/id (UUID/randomUUID)
                   :audit/action :scode/generated
                   :audit/entity-type :scode
@@ -261,7 +259,9 @@
             (when fix-eid
               (db/pull [:fixture/id :fixture/match-number :fixture/age-group :fixture/venue
                         :fixture/start-at :fixture/end-at :fixture/status
-                        {:fixture/sport-template [:sport-template/name]}
+                        {:fixture/sport-template [:sport-template/name
+                                                  :sport-template/scoring-increments
+                                                  :sport-template/period-labels]}
                         {:fixture/team-a [:participant/name]}
                         {:fixture/team-b [:participant/name]}]
                        fix-eid))))))))

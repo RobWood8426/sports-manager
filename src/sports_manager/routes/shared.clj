@@ -25,6 +25,17 @@
   [request]
   (or (:form-params request) {}))
 
+(defn request->base-url
+  "Derive the base URL from the incoming request's Host header so that QR codes
+  and links work regardless of hostname (dev, LAN IP, production domain, etc.)."
+  [request]
+  (let [host   (or (get-in request [:headers "x-forwarded-host"])
+                   (get-in request [:headers "host"])
+                   "localhost:3000")
+        scheme (or (get-in request [:headers "x-forwarded-proto"])
+                   (name (get request :scheme :http)))]
+    (str scheme "://" host)))
+
 (defn parse-event-id
   "Parse a UUID from a path param string, or nil on failure."
   [s]

@@ -1,3 +1,7 @@
+// Service worker disabled — unregister and do nothing.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', () => self.clients.claim());
+
 /**
  * sw.js — Service worker for SchoolScore PWA (SPO-46).
  *
@@ -9,7 +13,7 @@
  *   - Everything else: network-only.
  */
 
-const CACHE_VERSION = 'v1';
+const CACHE_VERSION = 'v2';
 const SHELL_CACHE = `schoolscore-shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `schoolscore-static-${CACHE_VERSION}`;
 
@@ -127,9 +131,10 @@ async function replayQueue() {
   const pending = await idbGetPending();
   for (const entry of pending) {
     try {
-      const formData = new FormData();
+      const formData = new URLSearchParams();
       Object.entries(entry.fields || {}).forEach(([k, v]) => formData.append(k, v));
-      const response = await fetch(entry.url, { method: entry.method, body: formData });
+      const response = await fetch(entry.url, { method: entry.method, body: formData,
+                                                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' } });
       if (response.ok) {
         await idbDequeue(entry.clientId);
       }

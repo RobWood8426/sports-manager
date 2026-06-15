@@ -1,6 +1,7 @@
 (ns sports-manager.views.events
   "Event pages: create form, detail management page, scoring dashboard."
   (:require [clojure.string :as str]
+            [hiccup2.core :as h]
             [sports-manager.views.shared :as shared]))
 
 (defn- format-datetime-local
@@ -36,15 +37,16 @@
      (when show-new?
        [:div.alert.alert-info.text-sm.p-3
         [:strong "New code generated (shown once): "]
-        [:code.font-mono.text-sm new-code]])
+        [:a.font-mono.font-bold.link.link-primary {:href (str "/score?code=" new-code) :target "_blank"} new-code]
+        [:span.ml-2.opacity-70 "↗ opens scorer tab"]])
      (when (seq codes)
        [:ul.flex.flex-col.gap-1
         (for [c codes]
           [:li.flex.items-center.gap-2
-           [:span.badge.badge-sm.badge-outline (name (:scode/status c))]
-           [:a.text-sm {:href (str "/events/" event-id
-                                   "/fixtures/" fixture-id
-                                   "/codes/" (:scode/id c) "/qr")}
+           (shared/scode-status-badge (:scode/status c))
+           [:a.text-sm.link.link-primary
+            {:href (str "/events/" event-id "/fixtures/" fixture-id "/codes/" (:scode/id c) "/qr")
+             :target "_blank"}
             "QR"]
            (when (= :scode.status/active (:scode/status c))
              [:form {:method "post"
@@ -62,7 +64,7 @@
 (defn- fixture-row [event-id f codes new-code new-code-fixture-id]
   (let [fixture-id (:fixture/id f)]
     (list
-     [:tr
+     [:tr {:id (str "fixture-" fixture-id)}
       [:td [:strong (:fixture/match-number f)]]
       [:td (get-in f [:fixture/sport-template :sport-template/name] "—")]
       [:td (get-in f [:fixture/team-a :participant/name] "—")]
@@ -71,9 +73,9 @@
       [:td (or (:fixture/venue f) "—")]
       [:td (when-let [s (:fixture/start-at f)]
              (.format (java.text.SimpleDateFormat. "HH:mm") s))]
-      [:td [:span.badge.badge-sm.badge-outline (name (:fixture/status f))]]]
-     [:tr.fixture-codes-row
-      [:td {:colspan "8"}
+      [:td (shared/fixture-status-badge (:fixture/status f))]]
+     [:tr {:style "background: transparent;"}
+      [:td.pb-3.pt-1 {:colspan "8"}
        (fixture-codes-section event-id fixture-id codes new-code new-code-fixture-id)]])))
 
 (defn event-new-form
@@ -174,7 +176,7 @@
                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
                   [:strong (:event/name event)]]
                  [:div.flex.items-center.gap-2.flex-wrap
-                  [:span.badge.badge-outline (name (:event/status event))]
+                  (shared/event-status-badge (:event/status event))
                   [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/dashboard")} "Dashboard"]
                   (when draft?
                     [:form {:method "post" :action (str "/events/" event-id "/publish") :class "m-0"}
@@ -190,8 +192,10 @@
                     (when-let [e (:event/end-at event)] (.format fmt e))])
                  (when event-code
                    [:p.text-sm.opacity-60
-                    "Code: " [:code.font-mono event-code] " "
-                    [:a {:href (str "/events/" event-id "/qr")} "Download QR"]])]
+                    "Code: "
+                    [:a.font-mono.link.link-primary {:href (str "/e/" event-code) :target "_blank"} event-code]
+                    " "
+                    [:a.link.link-primary {:href (str "/events/" event-id "/qr") :target "_blank"} "QR Code"]])]
                 [:section.mb-8
                  [:h2.text-xs.font-semibold.uppercase.tracking-widest.opacity-50.mb-3 "Participating schools"]
                  (if (seq participants)
@@ -203,7 +207,7 @@
                         (when-let [t (get-in p [:participant/tenant :tenant/name])]
                           [:span.text-sm.opacity-50.ml-2 (str "(" t ")")])]
                        [:span.text-sm.opacity-50 (or (:participant/contact-email p) "")]
-                       [:span.badge.badge-sm.badge-outline (name (:participant/status p))]
+                       (shared/participant-status-badge (:participant/status p))
                        [:form {:method "post"
                                :action (str "/events/" event-id "/participants/" (:participant/id p) "/remove")}
                         (shared/csrf-field)
@@ -366,7 +370,7 @@
                          [:option {:value "team.gender/girls"} "Girls"]
                          [:option {:value "team.gender/mixed"} "Mixed"]]]
                        [:button.btn.btn-sm {:type "submit"} "Add team"]]]]]])
-                [:section
+                [:section {:id "fixtures-section"}
                  [:div.flex.items-center.justify-between.gap-3.mb-3.flex-wrap
                   [:h2.text-xs.font-semibold.uppercase.tracking-widest.opacity-50.m-0 "Fixtures"]
                   (when (seq participants)
@@ -470,7 +474,28 @@
                            [:option {:value (str (:venue/id v))} (:venue/name v)])]]
                        (datetime-field fixture-errors :fixture/start-at "fixture-start-at" "Start" nil)
                        (datetime-field fixture-errors :fixture/end-at "fixture-end-at" "End" nil)
-                       [:button.btn.btn-sm {:type "submit"} "Add fixture"]]]]])])))
+                       [:button.btn.btn-sm {:type "submit"} "Add fixture"]]]]])]
+                (when filter-active?
+                  [:script (h/raw "document.getElementById('fixtures-section').scrollIntoView({behavior:'instant'});")]))))
+
+(defn event-qr-page
+  "Standalone page showing the event QR code with event details."
+  [ev spectator-url b64 fmt]
+  (shared/doc (str (:event/name ev) " — QR Code")
+              [:div.max-w-sm.mx-auto.p-8.flex.flex-col.items-center.gap-4.text-center
+               [:h1.text-2xl.font-bold (:event/name ev)]
+               (when (:event/description ev)
+                 [:p.text-sm.opacity-60 (:event/description ev)])
+               (when (or (:event/start-at ev) (:event/end-at ev))
+                 [:p.text-sm.opacity-60
+                  (when-let [s (:event/start-at ev)] (.format fmt s))
+                  (when (and (:event/start-at ev) (:event/end-at ev)) " – ")
+                  (when-let [e (:event/end-at ev)] (.format fmt e))])
+               [:img.mx-auto {:src (str "data:image/png;base64," b64)
+                              :alt "QR code"
+                              :style "width:260px;height:260px;image-rendering:pixelated"}]
+               [:p.text-xs.opacity-50 "Scan to view live scores"]
+               [:a.link.link-primary.text-sm {:href spectator-url :target "_blank"} spectator-url]]))
 
 (defn event-dashboard
   "Operational scoring dashboard for an event."
@@ -478,19 +503,17 @@
   (let [event-id (:event/id event)
         fmt (java.text.SimpleDateFormat. "HH:mm")
         {:keys [counts conflicts by-bucket]} dashboard
-        buckets [[:live "Live" "badge-success"]
-                 [:disputed "Disputed" "badge-error"]
-                 [:pending "Pending" "badge-warning"]
-                 [:completed "Completed" "badge-info"]
-                 [:no-activity "No activity" "badge-ghost"]]
-        bucket-badge (into {} (map (fn [[k _ b]] [k b]) buckets))
-        bucket-label (into {} (map (fn [[k l _]] [k l]) buckets))
+        buckets [[:live "Live" "badge-success" "text-success" "border-success/30"]
+                 [:disputed "Disputed" "badge-error" "text-error" "border-error/30"]
+                 [:pending "Pending" "badge-warning" "text-warning" "border-warning/30"]
+                 [:completed "Completed" "badge-info" "text-info" "border-info/30"]
+                 [:no-activity "No activity" "badge-ghost" "" "border-base-300"]]
+        bucket-label (into {} (map (fn [[k l _ _ _]] [k l]) buckets))
         dash-row (fn [f]
                    (let [bucket (:dashboard/bucket f)
                          score (:dashboard/score f)]
                      [:tr
-                      [:td [:span {:class (str "badge badge-sm " (get bucket-badge bucket "badge-ghost"))}
-                            (get bucket-label bucket (name bucket))]]
+                      [:td (shared/dashboard-bucket-badge bucket (get bucket-label bucket (name bucket)))]
                       [:td (get-in f [:fixture/sport-template :sport-template/name] "—")]
                       [:td (get-in f [:fixture/team-a :participant/name] "—")]
                       [:td (get-in f [:fixture/team-b :participant/name] "—")]
@@ -507,12 +530,15 @@
                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href (str "/events/" event-id)} (:event/name event)]
                   [:strong "Dashboard"]]
-                 [:span.badge.badge-outline (name (:event/status event))]]
+                 (shared/event-status-badge (:event/status event))]
                 [:div.grid.gap-3.mb-8
                  {:class "grid-cols-[repeat(auto-fill,minmax(130px,1fr))]"}
-                 (for [[bucket label _] buckets]
-                   [:div.rounded-xl.border.border-base-300.bg-base-200.p-4.text-center
-                    [:div.text-3xl.font-bold (get counts bucket 0)]
+                 (for [[bucket label _ num-cl bdr-cl] buckets]
+                   [:div.rounded-xl.border.bg-base-200.p-4.text-center
+                    {:class bdr-cl}
+                    [:div.text-3xl.font-bold
+                     {:class num-cl}
+                     (get counts bucket 0)]
                     [:div.text-xs.uppercase.tracking-widest.opacity-50.mt-1 label]])
                  [:div.rounded-xl.border.border-base-300.bg-base-200.p-4.text-center
                   [:div.text-3xl.font-bold (:total counts 0)]
