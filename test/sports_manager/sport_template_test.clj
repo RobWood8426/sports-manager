@@ -18,20 +18,19 @@
 
 (defn- seed-tenant! [tenant-name]
   (let [tid (UUID/randomUUID)]
-    (db/transact! [{:tenant/id tid :tenant/name tenant-name :tenant/status :active}])
+    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name tenant-name :tenant/status :active}])
     tid))
 
 (defn- seed-user! [uid email tenant-id]
-  (db/transact! [{:user/firebase-uid uid :user/email email :user/status :active}])
+  (db/put-many! [{:xt/id uid :user/firebase-uid uid :user/email email :user/status :active}])
   (when tenant-id
     (membership/create! uid tenant-id))
   uid)
 
 (defn- find-user-from-test-db [uid]
   (when uid
-    (let [e (db/pull [:user/firebase-uid :user/email :user/name :user/status
-                      {:user/roles [:role/name {:role/permissions [:db/ident]}]}]
-                     [:user/firebase-uid uid])]
+    (let [e (db/pull [:user/firebase-uid :user/email :user/name :user/status :user/roles]
+                     uid)]
       (when (:user/firebase-uid e) e))))
 
 (defn- GET

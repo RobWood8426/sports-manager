@@ -6,65 +6,66 @@
   - Querying memberships for a user or tenant
   - Removing memberships
 
+  :xt/id for a membership is the string \"<uid>|<tenant-id>\".
   Tenant-scoped roles live on the membership, not on the user directly.
   Platform roles (super-admin, support) stay on :user/roles."
   (:require [clojure.tools.logging :as log]
-            [datomic.api :as d]
             [sports-manager.db :as db])
   (:import java.util.Date
            java.util.UUID))
 
+(defn- membership-id [uid tenant-id]
+  (str uid "|" tenant-id))
+
 (def pull-pattern
+  "Flat pull pattern — :membership/tenant is a UUID scalar,
+  :membership/roles is a set of role UUIDs. No nested join maps."
   [:membership/id
    :membership/status
    :membership/joined-at
-   {:membership/tenant [:tenant/id :tenant/name :tenant/city :tenant/country]}
-   {:membership/roles [:role/name {:role/permissions [:db/ident]}]}])
+   :membership/tenant
+   :membership/roles])
 
 (defn find-by-user-and-tenant
   "Returns the membership entity for (uid, tenant-id), or nil."
   [uid tenant-id]
-  (let [db (db/db)
-        result (d/q '[:find ?m
-                      :in $ ?uid ?tid
-                      :where
-                      [?u :user/firebase-uid ?uid]
-                      [?t :tenant/id ?tid]
-                      [?m :membership/user ?u]
-                      [?m :membership/tenant ?t]]
-                    db uid tenant-id)]
-    (when-let [[eid] (first result)]
-      (db/pull pull-pattern eid))))
+  (db/entity (membership-id uid tenant-id)))
 
 (defn list-active-by-user
   "Returns all active memberships for a user (by firebase uid)."
   [uid]
-  (let [db (db/db)
-        eids (d/q '[:find [?m ...]
-                    :in $ ?uid
-                    :where
-                    [?u :user/firebase-uid ?uid]
-                    [?m :membership/user ?u]
-                    [?m :membership/status :membership.status/active]]
-                  db uid)]
-    (mapv #(db/pull pull-pattern %) eids)))
+  (let [pairs (db/q '{:find [?uid ?tid]
+                      :in [?uid]
+                      :where [[?m :membership/user ?uid]
+                              [?m :membership/tenant ?tid]
+                              [?m :membership/status :membership.status/active]]}
+                    uid)]
+    (mapv (fn [[u t]] (db/entity (membership-id u t))) pairs)))
 
 (defn list-active-by-tenant
-  "Returns all active memberships for a tenant (by tenant-id UUID)."
+  "Returns all active memberships for a tenant (by tenant-id UUID),
+  each merged with the user's profile attributes."
   [tenant-id]
-  (let [db (db/db)
-        eids (d/q '[:find [?m ...]
-                    :in $ ?tid
-                    :where
-                    [?t :tenant/id ?tid]
-                    [?m :membership/tenant ?t]
-                    [?m :membership/status :membership.status/active]]
-                  db tenant-id)]
-    (mapv (fn [eid]
-            (merge (db/pull pull-pattern eid)
-                   (db/pull [:user/firebase-uid :user/email :user/name :user/status]
-                            (first (first (d/q '[:find ?u :in $ ?m :where [?m :membership/user ?u]] (db/db) eid))))))
-          eids)))
+  (let [pairs (db/q '{:find [?uid ?tid]
+                      :in [?tid]
+                      :where [[?m :membership/user ?uid]
+                              [?m :membership/tenant ?tid]
+                              [?m :membership/status :membership.status/active]]}
+                    tenant-id)]
+    (mapv (fn [[uid tid]]
+            (merge (db/entity (membership-id uid tid))
+                   (db/pull [:user/firebase-uid :user/email :user/name :user/status] uid)))
+          pairs)))
+
+(defn- write-audit!
+  "Persist an audit entry as its own XTDB document."
+  [action actor entity-type after]
+  (when actor
+    (db/put! {:xt/id (UUID/randomUUID)
+              :audit/action action
+              :audit/actor actor
+              :audit/entity-type entity-type
+              :audit/after after})))
 
 (defn create!
   "Create a membership linking uid to tenant-id. Idempotent:
@@ -72,64 +73,42 @@
   - If a disabled membership exists, re-activates it.
   - Otherwise creates a new membership."
   [uid tenant-id & {:keys [actor]}]
-  (let [db (db/db)
-        user-eid (d/entid db [:user/firebase-uid uid])
-        tenant-eid (d/entid db [:tenant/id tenant-id])]
-    (when-not user-eid
-      (throw (ex-info "User not found" {:uid uid})))
-    (when-not tenant-eid
-      (throw (ex-info "Tenant not found" {:tenant-id tenant-id})))
-    (let [existing (find-by-user-and-tenant uid tenant-id)]
-      (cond
-        (= :membership.status/active (:membership/status existing))
-        nil
+  (when-not (db/exists? uid)
+    (throw (ex-info "User not found" {:uid uid})))
+  (when-not (db/exists? tenant-id)
+    (throw (ex-info "Tenant not found" {:tenant-id tenant-id})))
+  (let [mid (membership-id uid tenant-id)
+        existing (find-by-user-and-tenant uid tenant-id)]
+    (cond
+      (= :membership.status/active (:membership/status existing))
+      nil
 
-        (some? existing)
-        (do
-          (log/info "Re-activating membership" uid "->" tenant-id)
-          (db/transact! [{:db/id [:membership/id (:membership/id existing)]
-                          :membership/status :membership.status/active}]
-                        (when actor
-                          {:audit/action :user/add-to-tenant
-                           :audit/entity-type :user
-                           :audit/actor actor
-                           :audit/after (str tenant-id)})))
+      (some? existing)
+      (do
+        (log/info "Re-activating membership" uid "->" tenant-id)
+        (db/merge! mid {:membership/status :membership.status/active})
+        (write-audit! :user/add-to-tenant actor :user (str tenant-id)))
 
-        :else
-        (do
-          (log/info "Creating membership" uid "->" tenant-id)
-          (db/transact! [{:membership/id (UUID/randomUUID)
-                          :membership/user [:user/firebase-uid uid]
-                          :membership/tenant [:tenant/id tenant-id]
-                          :membership/status :membership.status/active
-                          :membership/joined-at (Date.)}]
-                        (when actor
-                          {:audit/action :user/add-to-tenant
-                           :audit/entity-type :user
-                           :audit/actor actor
-                           :audit/after (str tenant-id)})))))))
+      :else
+      (do
+        (log/info "Creating membership" uid "->" tenant-id)
+        (db/put! {:xt/id mid
+                  :membership/id (UUID/randomUUID)
+                  :membership/user uid
+                  :membership/tenant tenant-id
+                  :membership/status :membership.status/active
+                  :membership/joined-at (Date.)})
+        (write-audit! :user/add-to-tenant actor :user (str tenant-id))))))
 
 (defn disable!
   "Mark a membership as disabled (soft delete)."
   [uid tenant-id & {:keys [actor]}]
-  (let [db (db/db)
-        result (d/q '[:find ?m
-                      :in $ ?uid ?tid
-                      :where
-                      [?u :user/firebase-uid ?uid]
-                      [?t :tenant/id ?tid]
-                      [?m :membership/user ?u]
-                      [?m :membership/tenant ?t]]
-                    db uid tenant-id)]
-    (if-let [[eid] (first result)]
+  (let [mid (membership-id uid tenant-id)]
+    (if (db/exists? mid)
       (do
         (log/info "Disabling membership" uid "->" tenant-id)
-        (db/transact! [{:db/id eid :membership/status :membership.status/disabled}]
-                      (when actor
-                        {:audit/action :user/remove-from-tenant
-                         :audit/entity-type :user
-                         :audit/actor actor
-                         :audit/after (str tenant-id)})))
+        (db/merge! mid {:membership/status :membership.status/disabled})
+        (write-audit! :user/remove-from-tenant actor :user (str tenant-id)))
       (throw (ex-info "Membership not found" {:uid uid :tenant-id tenant-id})))))
 
 (defn active?

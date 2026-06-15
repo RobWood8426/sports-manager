@@ -79,50 +79,46 @@
 ;; Query
 ;; ---------------------------------------------------------------------------
 
+(def ^:private event-pull-attrs
+  [:event/id :event/name :event/description
+   :event/start-at :event/end-at :event/status
+   :event/visibility :event/access-method
+   :event/code :event/published-at
+   :event/sport-templates])
+
 (defn list-by-tenant
   "Return all events for `tenant-id`, most-recent first."
   [tenant-id]
-  (let [eids (db/q '[:find [?e ...]
-                     :in $ ?tid
-                     :where
-                     [?t :tenant/id ?tid]
-                     [?e :event/tenant ?t]]
-                   tenant-id)]
-    (->> eids
-         (mapv #(db/pull [:event/id :event/name :event/description
-                          :event/start-at :event/end-at :event/status
-                          :event/visibility :event/access-method
-                          :event/code :event/published-at
-                          {:event/sport-templates [:sport-template/code
-                                                   :sport-template/name]}]
-                         %))
+  (let [ids (db/q '{:find [?id]
+                    :in [?tid]
+                    :where [[?e :event/tenant ?tid]
+                            [?e :event/id ?id]]}
+                  tenant-id)]
+    (->> ids
+         (map first)
+         (mapv #(db/pull event-pull-attrs %))
          (filter :event/id)
          (sort-by :event/start-at #(compare %2 %1)))))
 
 (defn find-by-id
   "Pull an event by UUID, or nil."
   [event-id]
-  (let [e (db/pull [:event/id :event/name :event/description
-                    :event/start-at :event/end-at :event/status
-                    :event/visibility :event/access-method
-                    :event/code :event/published-at
-                    {:event/sport-templates [:sport-template/code
-                                             :sport-template/name]}]
-                   [:event/id event-id])]
+  (let [e (db/pull event-pull-attrs event-id)]
     (when (:event/id e) e)))
 
 (defn find-by-code
-  "Pull a published event by its short access code, or nil."
+  "Pull an event by its short access code, or nil."
   [code]
   (when-not (str/blank? code)
-    (let [e (db/pull [:event/id :event/name :event/description
-                      :event/start-at :event/end-at :event/status
-                      :event/visibility :event/access-method
-                      :event/code :event/published-at
-                      {:event/sport-templates [:sport-template/code
-                                               :sport-template/name]}]
-                     [:event/code (str/upper-case code)])]
-      (when (:event/id e) e))))
+    (let [upper (str/upper-case code)
+          result (db/q '{:find [?id]
+                         :in [?c]
+                         :where [[?e :event/code ?c]
+                                 [?e :event/id ?id]]}
+                       upper)
+          event-id (ffirst result)]
+      (when event-id
+        (find-by-id event-id)))))
 
 ;; ---------------------------------------------------------------------------
 ;; Mutation
@@ -137,26 +133,21 @@
   (let [event-id (UUID/randomUUID)
         code (generate-code)
         now (Date/from (Instant/now))
-        code->eid (into {}
-                        (map (fn [[eid c]] [c eid]))
-                        (db/q '[:find ?e ?code
-                                :where [?e :sport-template/code ?code]]))
-        sport-refs (keep code->eid sport-codes)
-        tx-data [(cond-> {:db/id "new-event"
-                          :event/id event-id
-                          :event/name name
-                          :event/code code
-                          :event/status :event.status/draft
-                          :event/tenant [:tenant/id tenant-id]
-                          :event/created-at now}
-                   (not (str/blank? description)) (assoc :event/description description)
-                   start-at (assoc :event/start-at start-at)
-                   end-at (assoc :event/end-at end-at)
-                   visibility (assoc :event/visibility visibility)
-                   access-method (assoc :event/access-method access-method)
-                   (seq sport-refs) (assoc :event/sport-templates (vec sport-refs)))]]
+        doc (cond-> {:xt/id event-id
+                     :event/id event-id
+                     :event/name name
+                     :event/code code
+                     :event/status :event.status/draft
+                     :event/tenant tenant-id
+                     :event/created-at now}
+              (not (str/blank? description)) (assoc :event/description description)
+              start-at (assoc :event/start-at start-at)
+              end-at (assoc :event/end-at end-at)
+              visibility (assoc :event/visibility visibility)
+              access-method (assoc :event/access-method access-method)
+              (seq sport-codes) (assoc :event/sport-templates (set sport-codes)))]
     (log/info "Creating event draft" name "for tenant" tenant-id "by" actor-uid)
-    (db/transact! tx-data)
+    (db/put! doc)
     (find-by-id event-id)))
 
 (defn publish!
@@ -170,9 +161,8 @@
       (throw (ex-info "Event is not in draft status"
                       {:event/id event-id :event/status (:event/status ev)})))
     (let [now (Date/from (Instant/now))]
-      (db/transact! [{:db/id [:event/id event-id]
-                      :event/status :event.status/published
-                      :event/published-at now}])
+      (db/merge! event-id {:event/status :event.status/published
+                           :event/published-at now})
       (log/info "Event published" event-id "by" actor-uid)
       (find-by-id event-id))))
 

@@ -22,10 +22,10 @@
   (st/seed-templates!)
   (let [tid (UUID/randomUUID)
         uid "actor"]
-    (db/transact! [{:tenant/id tid :tenant/name "Score School"
-                    :tenant/status :active}
-                   {:user/firebase-uid uid :user/email "s@x.com"
-                    :user/status :active}])
+    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "Score School"
+                   :tenant/status :active}
+                  {:xt/id uid :user/firebase-uid uid :user/email "s@x.com"
+                   :user/status :active}])
     (membership/create! uid tid)
     (let [ev (event/create! tid uid
                             {:event/name "Score Day"

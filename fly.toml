@@ -1,0 +1,50 @@
+# fly.toml — generated for Fly.io deployment
+# Replace "sports-manager" with your chosen app name (must be globally unique).
+# Deploy with: fly deploy
+
+app = "sports-manager"
+primary_region = "jnb"  # Johannesburg — closest to ZA
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  SM_ENV        = "production"
+  SM_XTDB_DATA_DIR = "/data/xtdb"
+  PORT          = "8080"
+
+# Secrets (set with `fly secrets set KEY=value`, never committed):
+#   SM_FIREBASE_CREDENTIALS_JSON  — full contents of firebase-sa.json
+#   FIREBASE_PROJECT_ID
+#   FIREBASE_API_KEY
+#   FIREBASE_AUTH_DOMAIN
+#   FIREBASE_APP_ID
+#   SM_SESSION_SECRET             — random 32+ char string
+#   SM_BASE_URL                   — e.g. https://sports-manager.fly.dev
+
+[[mounts]]
+  source      = "xtdb_data"
+  destination = "/data/xtdb"
+
+[http_service]
+  internal_port = 8080
+  force_https   = true
+  auto_stop_machines  = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type       = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+  [[http_service.checks]]
+    grace_period = "30s"
+    interval     = "15s"
+    timeout      = "5s"
+    method       = "GET"
+    path         = "/"
+
+[[vm]]
+  size   = "shared-cpu-1x"
+  memory = "512mb"

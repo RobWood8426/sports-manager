@@ -1,6 +1,7 @@
 (ns sports-manager.routes.admin.users
   "User management and RBAC handlers."
   (:require [ring.util.response :as resp]
+            [sports-manager.invite :as invite]
             [sports-manager.rbac :as rbac]
             [sports-manager.routes.shared :as shared]
             [sports-manager.user :as user]
@@ -13,9 +14,12 @@
   (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
     (if-not tenant-id
       user-or-redirect
-      (shared/html (views.admin/users-list user-or-redirect
-                                           (user/list-by-tenant tenant-id)
-                                           (keys rbac/role-permissions))))))
+      (let [invited? (= "1" (get (:query-params request) "invited"))]
+        (shared/html (views.admin/users-list user-or-redirect
+                                             (user/list-by-tenant tenant-id)
+                                             (keys rbac/role-permissions)
+                                             {:pending-invites (invite/find-pending-by-tenant tenant-id)
+                                              :invited? invited?}))))))
 
 (defn users-add
   "POST /users/add — add an existing user by email to this tenant."
@@ -31,17 +35,11 @@
                                                (user/list-by-tenant tenant-id)
                                                (keys rbac/role-permissions)
                                                {:add-errors errors :add-email email}))
-          (let [found (user/find-by-email email)]
-            (cond
-              (nil? found)
-              (shared/html (views.admin/users-list current-user
-                                                   (user/list-by-tenant tenant-id)
-                                                   (keys rbac/role-permissions)
-                                                   {:add-errors {:not-found (str "No account found for " email ". They need to sign in first.")}
-                                                    :add-email email}))
-              :else
+          (let [found (user/find-by-email email)
+                actor-uid (:user/firebase-uid current-user)]
+            (if found
               (try
-                (user/add-to-tenant! found tenant-id (:user/firebase-uid current-user))
+                (user/add-to-tenant! found tenant-id actor-uid)
                 (resp/redirect "/users")
                 (catch clojure.lang.ExceptionInfo e
                   (if (= "User already belongs to another tenant" (ex-message e))
@@ -50,7 +48,10 @@
                                                          (keys rbac/role-permissions)
                                                          {:add-errors {:other-tenant (str email " belongs to a different organisation and cannot be added.")}
                                                           :add-email email}))
-                    (throw e)))))))))))
+                    (throw e))))
+              (do
+                (invite/create! email tenant-id actor-uid)
+                (resp/redirect "/users?invited=1")))))))))
 
 (defn users-set-roles
   "POST /users/:uid/roles — replace this user's role set."
@@ -62,13 +63,12 @@
             target-uid (get-in request [:path-params :uid])
             submitted (let [v (get (shared/form-params request) "roles")]
                         (if (string? v) #{v} (set v)))
-            all-roles (set (map #(name %) (keys rbac/role-permissions)))
-            target-eid [:user/firebase-uid target-uid]]
+            all-roles (set (map #(name %) (keys rbac/role-permissions)))]
         (doseq [rn all-roles]
           (let [kw (keyword "role.name" rn)]
             (if (contains? submitted rn)
-              (rbac/grant-role! target-eid kw :actor (:user/firebase-uid current-user))
-              (rbac/revoke-role! target-eid kw :actor (:user/firebase-uid current-user)))))
+              (rbac/grant-role! target-uid kw :actor (:user/firebase-uid current-user))
+              (rbac/revoke-role! target-uid kw :actor (:user/firebase-uid current-user)))))
         (shared/html (views.shared/toast-fragment "Roles saved"))))))
 
 (defn users-remove

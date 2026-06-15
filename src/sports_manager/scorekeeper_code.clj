@@ -3,11 +3,11 @@
 
   A plaintext code is generated, shown once to the admin, then discarded.
   Only the SHA-256 hex digest is stored. Verification hashes the candidate
-  and compares digests — constant-time via MessageDigest.isEqual."
+  and compares digests -- constant-time via MessageDigest.isEqual."
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [datomic.api :as d]
-            [sports-manager.db :as db])
+            [sports-manager.db :as db]
+            [xtdb.api :as xt])
   (:import java.security.MessageDigest
            java.security.SecureRandom
            java.util.Date
@@ -17,10 +17,7 @@
 ;; Rate limiting (in-memory, per IP, resets on restart)
 ;; ---------------------------------------------------------------------------
 
-(def ^:private failed-attempts
-  "Map of IP → {:count n :window-start inst}"
-  (atom {}))
-
+(def ^:private failed-attempts (atom {}))
 (def ^:private max-attempts 5)
 (def ^:private window-ms (* 15 60 1000))
 
@@ -37,9 +34,7 @@
 (defn- clear-failures! [ip]
   (swap! failed-attempts dissoc ip))
 
-(defn rate-limited?
-  "Returns true if this IP has exceeded max-attempts within the window."
-  [ip]
+(defn rate-limited? [ip]
   (let [now (System/currentTimeMillis)
         {:keys [count window-start]} (get @failed-attempts ip {:count 0 :window-start now})]
     (and (>= count max-attempts)
@@ -49,9 +44,7 @@
 ;; Crypto helpers
 ;; ---------------------------------------------------------------------------
 
-(defn- random-code
-  "Generate a cryptographically random alphanumeric code of `len` chars."
-  [len]
+(defn- random-code [len]
   (let [alphabet "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
         rng (SecureRandom.)
         sb (StringBuilder.)]
@@ -72,29 +65,24 @@
 ;; ---------------------------------------------------------------------------
 
 (def ^:private pull-pattern
-  [:scode/id :scode/status :scode/game-status :scode/created-at :scode/created-by :scode/expires-at
-   {:scode/fixture [:fixture/id :fixture/match-number]}])
+  [:scode/id :scode/status :scode/game-status :scode/created-at
+   :scode/created-by :scode/expires-at :scode/tenant
+   {:scode/fixture [:fixture/id :fixture/match-number :fixture/event]}])
 
 ;; ---------------------------------------------------------------------------
 ;; Query
 ;; ---------------------------------------------------------------------------
 
-(defn find-by-id
-  "Pull a scorekeeper code by UUID, or nil."
-  [code-id]
-  (let [e (db/pull pull-pattern [:scode/id code-id])]
-    (when (:scode/id e) e)))
+(defn find-by-id [code-id]
+  (db/pull pull-pattern code-id))
 
-(defn list-by-fixture
-  "Return all scorekeeper codes for a fixture, sorted by created-at desc."
-  [fixture-id]
-  (let [eids (d/q '[:find [?c ...]
-                    :in $ ?fid
-                    :where
-                    [?f :fixture/id ?fid]
-                    [?c :scode/fixture ?f]]
-                  (db/db) fixture-id)]
-    (->> eids
+(defn list-by-fixture [fixture-id]
+  (let [ids (map first (db/q '{:find [?cid]
+                               :in [?fid]
+                               :where [[?c :scode/fixture ?fid]
+                                       [?c :scode/id ?cid]]}
+                             fixture-id))]
+    (->> ids
          (mapv #(db/pull pull-pattern %))
          (filter :scode/id)
          (sort-by :scode/created-at #(compare %2 %1)))))
@@ -108,86 +96,85 @@
   {:code plaintext-code :entity scode-entity-map}.
   The plaintext is returned exactly once and never stored."
   [fixture-id actor-uid]
-  (let [db (db/db)
-        fix-eid (d/q '[:find ?f . :in $ ?fid :where [?f :fixture/id ?fid]] db fixture-id)
-        _ (when-not fix-eid
+  (let [fixture (db/entity fixture-id)
+        _ (when-not fixture
             (throw (ex-info "Fixture not found" {:fixture/id fixture-id})))
-        tenant-eid (d/q '[:find ?t . :in $ ?f :where [?f :fixture/tenant ?t]] db fix-eid)
+        tenant-id (:fixture/tenant fixture)
         plaintext (random-code 8)
         code-hash (sha256-hex plaintext)
         code-id (UUID/randomUUID)
         now (Date.)
-        tx-data [{:scode/id code-id
-                  :scode/fixture fix-eid
-                  :scode/code-hash code-hash
-                  :scode/status :scode.status/active
-                  :scode/tenant tenant-eid
-                  :scode/created-at now
-                  :scode/created-by actor-uid}
-                 {:audit/id (UUID/randomUUID)
-                  :audit/action :scode/generated
-                  :audit/entity-type :scode
-                  :audit/entity-id code-id
-                  :audit/actor actor-uid
-                  :audit/at now}]]
+        audit-id (UUID/randomUUID)]
     (log/info "Generating scorekeeper code for fixture" fixture-id "by" actor-uid)
-    (db/transact! tx-data)
+    (db/submit! [[::xt/put {:xt/id code-id
+                            :scode/id code-id
+                            :scode/fixture fixture-id
+                            :scode/code-hash code-hash
+                            :scode/status :scode.status/active
+                            :scode/tenant tenant-id
+                            :scode/created-at now
+                            :scode/created-by actor-uid
+                            :scode/expires-at (:fixture/end-at fixture)}]
+                 [::xt/put {:xt/id audit-id
+                            :audit/id audit-id
+                            :audit/action :scode/generated
+                            :audit/entity-type :scode
+                            :audit/entity-id code-id
+                            :audit/actor actor-uid
+                            :audit/tenant tenant-id
+                            :audit/at now}]])
     {:code plaintext
      :entity (find-by-id code-id)}))
 
 (defn verify-code
   "Check a plaintext candidate against active codes for a fixture.
-  Returns the matching scode entity on success, nil on failure.
-  `ip` is used for rate limiting — pass the remote IP string."
+  Returns the matching scode entity on success, nil on failure."
   [fixture-id candidate ip]
   (when (rate-limited? ip)
     (throw (ex-info "Too many failed attempts" {:type :rate-limited})))
   (let [now (Date.)
-        eids (d/q '[:find [?c ...]
-                    :in $ ?fid
-                    :where
-                    [?f :fixture/id ?fid]
-                    [?c :scode/fixture ?f]
-                    [?c :scode/status :scode.status/active]]
-                  (db/db) fixture-id)
-        active (mapv #(db/pull [:scode/id :scode/code-hash :scode/expires-at] %) eids)
-        candidate-hash (sha256-hex candidate)
+        ids (map first (db/q '{:find [?cid]
+                               :in [?fid]
+                               :where [[?c :scode/fixture ?fid]
+                                       [?c :scode/status :scode.status/active]
+                                       [?c :scode/id ?cid]]}
+                             fixture-id))
+        active (mapv #(db/pull [:scode/id :scode/code-hash :scode/expires-at] %) ids)
+        cand-hash (sha256-hex candidate)
         match (first (filter (fn [e]
-                               (and (constant-time-equal? (:scode/code-hash e) candidate-hash)
+                               (and (constant-time-equal? (:scode/code-hash e) cand-hash)
                                     (or (nil? (:scode/expires-at e))
                                         (.after (:scode/expires-at e) now))))
                              active))]
     (if match
-      (do
-        (clear-failures! ip)
-        (find-by-id (:scode/id match)))
-      (do
-        (record-failure! ip)
-        nil))))
+      (do (clear-failures! ip) (find-by-id (:scode/id match)))
+      (do (record-failure! ip) nil))))
 
 (defn revoke!
   "Revoke an active scorekeeper code. Returns the updated entity."
   [code-id actor-uid]
-  (let [existing (find-by-id code-id)]
-    (when-not existing
+  (let [check (find-by-id code-id)]
+    (when-not check
       (throw (ex-info "Code not found" {:scode/id code-id})))
-    (when (= :scode.status/revoked (:scode/status existing))
+    (when (= :scode.status/revoked (:scode/status check))
       (throw (ex-info "Code already revoked" {:scode/id code-id})))
-    (let [now (Date.)]
+    (let [existing (db/entity code-id)
+          now (Date.)
+          audit-id (UUID/randomUUID)]
       (log/info "Revoking scorekeeper code" code-id "by" actor-uid)
-      (db/transact! [{:db/id [:scode/id code-id]
-                      :scode/status :scode.status/revoked}
-                     {:audit/id (UUID/randomUUID)
-                      :audit/action :scode/revoked
-                      :audit/entity-type :scode
-                      :audit/entity-id code-id
-                      :audit/actor actor-uid
-                      :audit/at now}]))
+      (db/submit! [[::xt/put (assoc existing :scode/status :scode.status/revoked)]
+                   [::xt/put {:xt/id audit-id
+                              :audit/id audit-id
+                              :audit/action :scode/revoked
+                              :audit/entity-type :scode
+                              :audit/entity-id code-id
+                              :audit/actor actor-uid
+                              :audit/tenant (:scode/tenant existing)
+                              :audit/at now}]]))
     (find-by-id code-id)))
 
 (defn regenerate!
-  "Revoke the most recent active code for a fixture and generate a fresh one.
-  Returns {:code plaintext :entity new-scode-entity}."
+  "Revoke all active codes for a fixture and generate a fresh one."
   [fixture-id actor-uid]
   (let [active (filter #(= :scode.status/active (:scode/status %))
                        (list-by-fixture fixture-id))]
@@ -201,87 +188,72 @@
 
 (def ^:private assignment-pull-pattern
   [:assignment/id :assignment/label :assignment/created-at
-   {:assignment/scode [:scode/id :scode/status :scode/expires-at]}
-   {:assignment/fixture [:fixture/id :fixture/match-number]}])
+   :assignment/fixture
+   {:assignment/scode [:scode/id :scode/status :scode/game-status
+                       :scode/created-at :scode/expires-at]}])
 
 (defn assign!
   "Create a labelled scorekeeper assignment for a fixture. Generates a fresh
-  code and links it to the given label. Returns the assignment entity map.
-  `label` is a human-readable string, e.g. \"Scorekeeper 1\"."
+  code and links it to the given label. Returns the assignment entity map."
   [fixture-id label actor-uid]
-  (let [db (db/db)
-        fix-eid (d/q '[:find ?f . :in $ ?fid :where [?f :fixture/id ?fid]] db fixture-id)
-        _ (when-not fix-eid
+  (let [fixture (db/entity fixture-id)
+        _ (when-not fixture
             (throw (ex-info "Fixture not found" {:fixture/id fixture-id})))
-        tenant-eid (d/q '[:find ?t . :in $ ?f :where [?f :fixture/tenant ?t]] db fix-eid)
+        tenant-id (:fixture/tenant fixture)
         {:keys [entity]} (generate! fixture-id actor-uid)
-        scode-eid (d/q '[:find ?c . :in $ ?cid :where [?c :scode/id ?cid]]
-                       (db/db) (:scode/id entity))
+        scode-id (:scode/id entity)
         assignment-id (UUID/randomUUID)
         now (Date.)]
     (log/info "Assigning scorekeeper" label "to fixture" fixture-id "by" actor-uid)
-    (db/transact! [{:assignment/id assignment-id
-                    :assignment/fixture fix-eid
-                    :assignment/scode scode-eid
-                    :assignment/label label
-                    :assignment/tenant tenant-eid
-                    :assignment/created-at now
-                    :assignment/created-by actor-uid}])
-    (let [e (db/pull assignment-pull-pattern [:assignment/id assignment-id])]
-      (when (:assignment/id e) e))))
+    (db/put! {:xt/id assignment-id
+              :assignment/id assignment-id
+              :assignment/fixture fixture-id
+              :assignment/scode scode-id
+              :assignment/label label
+              :assignment/tenant tenant-id
+              :assignment/created-at now
+              :assignment/created-by actor-uid})
+    (db/pull assignment-pull-pattern assignment-id)))
 
-(defn list-assignments-by-fixture
-  "Return all assignments for a fixture, sorted by created-at ascending."
-  [fixture-id]
-  (let [eids (d/q '[:find [?a ...]
-                    :in $ ?fid
-                    :where
-                    [?f :fixture/id ?fid]
-                    [?a :assignment/fixture ?f]]
-                  (db/db) fixture-id)]
-    (->> eids
+(defn list-assignments-by-fixture [fixture-id]
+  (let [ids (map first (db/q '{:find [?aid]
+                               :in [?fid]
+                               :where [[?a :assignment/fixture ?fid]
+                                       [?a :assignment/id ?aid]]}
+                             fixture-id))]
+    (->> ids
          (mapv #(db/pull assignment-pull-pattern %))
          (filter :assignment/id)
          (sort-by :assignment/created-at))))
 
 (defn find-fixture-by-code
-  "Look up the fixture for a valid (active, non-expired) scode id.
-  Returns the fixture entity map or nil."
+  "Look up the fixture for a valid (active, non-expired) scode id."
   [scode-id]
   (when-let [sc (find-by-id scode-id)]
     (when (= :scode.status/active (:scode/status sc))
       (let [now (Date.)]
         (when (or (nil? (:scode/expires-at sc))
                   (.after (:scode/expires-at sc) now))
-          (let [fix-eid (d/q '[:find ?f . :in $ ?cid
-                               :where [?c :scode/id ?cid] [?c :scode/fixture ?f]]
-                             (db/db) scode-id)]
-            (when fix-eid
-              (db/pull [:fixture/id :fixture/match-number :fixture/age-group :fixture/venue
-                        :fixture/start-at :fixture/end-at :fixture/status
-                        {:fixture/sport-template [:sport-template/name
-                                                  :sport-template/scoring-increments
-                                                  :sport-template/period-labels]}
-                        {:fixture/team-a [:participant/name]}
-                        {:fixture/team-b [:participant/name]}]
-                       fix-eid))))))))
+          (db/pull [:fixture/id :fixture/match-number :fixture/age-group :fixture/venue
+                    :fixture/start-at :fixture/end-at :fixture/status
+                    :fixture/sport-template :fixture/team-a :fixture/team-b]
+                   (get-in sc [:scode/fixture :fixture/id])))))))
+
 
 (defn find-active-by-plaintext
-  "Look up an active, non-expired scode entity by its plaintext code string.
-  Returns the scode entity map or nil. Records a failed attempt against `ip`
-  if no match is found; clears failures on success."
+  "Look up an active, non-expired scode entity by its plaintext code string."
   [plaintext ip]
   (when (rate-limited? ip)
     (throw (ex-info "Too many failed attempts" {:type :rate-limited})))
-  (let [candidate-hash (sha256-hex plaintext)
+  (let [cand-hash (sha256-hex plaintext)
         now (Date.)
-        eids (d/q '[:find [?c ...]
-                    :in $ ?h
-                    :where
-                    [?c :scode/code-hash ?h]
-                    [?c :scode/status :scode.status/active]]
-                  (db/db) candidate-hash)
-        active (mapv #(db/pull [:scode/id :scode/code-hash :scode/expires-at] %) eids)
+        ids (map first (db/q '{:find [?cid]
+                               :in [?h]
+                               :where [[?c :scode/code-hash ?h]
+                                       [?c :scode/status :scode.status/active]
+                                       [?c :scode/id ?cid]]}
+                             cand-hash))
+        active (mapv #(db/pull [:scode/id :scode/expires-at] %) ids)
         match (first (filter (fn [e]
                                (or (nil? (:scode/expires-at e))
                                    (.after (:scode/expires-at e) now)))
@@ -294,94 +266,80 @@
 ;; Game-status lifecycle (SPO-44)
 ;; ---------------------------------------------------------------------------
 
-(defn- advance-game-status!
-  "Internal helper: assert a new game-status on an scode and write an audit entry."
-  [code-id new-status audit-action actor-uid reason]
-  (let [existing (find-by-id code-id)]
-    (when-not existing
+(defn- advance-game-status! [code-id new-status audit-action actor-uid reason]
+  (let [check (find-by-id code-id)]
+    (when-not check
       (throw (ex-info "Code not found" {:scode/id code-id})))
-    (when-not (= :scode.status/active (:scode/status existing))
+    (when-not (= :scode.status/active (:scode/status check))
       (throw (ex-info "Code is not active" {:scode/id code-id
-                                            :scode/status (:scode/status existing)})))
-    (let [now (Date.)
-          audit (cond-> {:audit/id (UUID/randomUUID)
+                                            :scode/status (:scode/status check)})))
+    (let [existing (db/entity code-id)
+          now (Date.)
+          audit-id (UUID/randomUUID)
+          audit (cond-> {:xt/id audit-id
+                         :audit/id audit-id
                          :audit/action audit-action
                          :audit/entity-type :scode
                          :audit/entity-id code-id
                          :audit/actor (or actor-uid "scorekeeper")
+                         :audit/tenant (:scode/tenant existing)
                          :audit/at now}
                   reason (assoc :audit/reason reason))]
-      (db/transact! [{:db/id [:scode/id code-id]
-                      :scode/game-status new-status}
-                     audit])))
+      (db/submit! [[::xt/put (assoc existing :scode/game-status new-status)]
+                   [::xt/put audit]])))
   (find-by-id code-id))
 
-(defn mark-accessed!
-  "Record that the scorekeeper has accessed the code (first page load on /live).
-  No actor-uid required — this is an anonymous scorekeeper action."
-  [code-id]
+(defn mark-accessed! [code-id]
   (advance-game-status! code-id :scode.game-status/accessed :scode/accessed nil nil))
 
-(defn start-game!
-  "Advance game-status to :started when the scorekeeper explicitly begins scoring."
-  [code-id actor-uid]
+(defn start-game! [code-id actor-uid]
   (advance-game-status! code-id :scode.game-status/started :scode/started actor-uid nil))
 
-(defn go-live!
-  "Advance game-status to :live once the first score entry is made."
-  [code-id actor-uid]
+(defn go-live! [code-id actor-uid]
   (advance-game-status! code-id :scode.game-status/live :scode/live actor-uid nil))
 
-(defn submit-final!
-  "Mark final score as submitted by the scorekeeper; awaiting admin acceptance."
-  [code-id actor-uid]
+(defn submit-final! [code-id actor-uid]
   (advance-game-status! code-id :scode.game-status/final-submitted :scode/final-submitted actor-uid nil))
 
-(defn pend-final!
-  "Move to final-pending when awaiting a second scorekeeper or admin review."
-  [code-id actor-uid]
+(defn pend-final! [code-id actor-uid]
   (advance-game-status! code-id :scode.game-status/final-pending :scode/final-pending actor-uid nil))
 
-(defn accept-final!
-  "Admin accepts the final score submission."
-  [code-id actor-uid]
+(defn accept-final! [code-id actor-uid]
   (advance-game-status! code-id :scode.game-status/final-accepted :scode/final-accepted actor-uid nil))
 
-(defn dispute-final!
-  "Admin disputes the final score. `reason` is required."
-  [code-id actor-uid reason]
+(defn dispute-final! [code-id actor-uid reason]
   (when (str/blank? reason)
     (throw (ex-info "Dispute reason is required" {:scode/id code-id})))
   (advance-game-status! code-id :scode.game-status/final-disputed :scode/final-disputed actor-uid reason))
 
 (defn expire-codes!
-  "Set status to :expired for all active codes on a fixture whose expires-at has passed.
-  Safe to call repeatedly (idempotent on already-expired codes)."
+  "Set status to :expired for all active codes on a fixture whose expires-at has passed."
   [fixture-id]
   (let [now (Date.)
-        eids (d/q '[:find [?c ...]
-                    :in $ ?fid
-                    :where
-                    [?f :fixture/id ?fid]
-                    [?c :scode/fixture ?f]
-                    [?c :scode/status :scode.status/active]]
-                  (db/db) fixture-id)
-        expired (filter (fn [eid]
-                          (let [e (db/pull [:scode/id :scode/expires-at] eid)]
-                            (when-let [exp (:scode/expires-at e)]
-                              (.after now exp))))
-                        eids)]
+        ids (map first (db/q '{:find [?cid]
+                               :in [?fid]
+                               :where [[?c :scode/fixture ?fid]
+                                       [?c :scode/status :scode.status/active]
+                                       [?c :scode/id ?cid]]}
+                             fixture-id))
+        docs (mapv #(db/pull [:scode/id :scode/expires-at] %) ids)
+        expired (filter (fn [e]
+                          (when-let [exp (:scode/expires-at e)]
+                            (.after now exp)))
+                        docs)]
     (when (seq expired)
-      (let [tx-data (mapcat (fn [eid]
-                              (let [sc (db/pull [:scode/id] eid)]
-                                [{:db/id eid :scode/status :scode.status/expired}
-                                 {:audit/id (UUID/randomUUID)
-                                  :audit/action :scode/expired
-                                  :audit/entity-type :scode
-                                  :audit/entity-id (:scode/id sc)
-                                  :audit/actor "system"
-                                  :audit/at now}]))
-                            expired)]
-        (log/info "Expiring" (count expired) "code(s) for fixture" fixture-id)
-        (db/transact! (vec tx-data))))
+      (log/info "Expiring" (count expired) "code(s) for fixture" fixture-id)
+      (db/submit! (mapcat (fn [{:scode/keys [id]}]
+                            (let [audit-id (UUID/randomUUID)
+                                  doc (db/entity id)]
+                              [[::xt/put (assoc doc :scode/status :scode.status/expired)]
+                               [::xt/put {:xt/id audit-id
+                                          :audit/id audit-id
+                                          :audit/action :scode/expired
+                                          :audit/entity-type :scode
+                                          :audit/entity-id id
+                                          :audit/actor "system"
+                                          :audit/tenant (:scode/tenant doc)
+                                          :audit/at now}]]))
+                          expired)))
     (count expired)))

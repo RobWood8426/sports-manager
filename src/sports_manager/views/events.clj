@@ -274,7 +274,7 @@
                                              "venue.type/astro" "Astroturf"
                                              "venue.type/hall" "Hall"
                                              "venue.type/other" "Other"}
-                                            (some-> v :venue/type :db/ident name) "—")]
+                                            (some-> v :venue/type name) "—")]
                         [:div.flex.items-center.gap-3.rounded-xl.border.border-base-300.bg-base-200.px-4.py-3
                          [:span.font-semibold.flex-1 (:venue/name v)]
                          [:span.text-sm.opacity-50 type-label]

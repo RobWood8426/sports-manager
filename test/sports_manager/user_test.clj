@@ -17,11 +17,11 @@
 
 (defn- seed-tenant! [name]
   (let [tid (UUID/randomUUID)]
-    (db/transact! [{:tenant/id tid :tenant/name name :tenant/status :active}])
+    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name name :tenant/status :active}])
     tid))
 
 (defn- seed-user! [uid email tenant-id]
-  (db/transact! [{:user/firebase-uid uid :user/email email :user/status :active}])
+  (db/put-many! [{:xt/id uid :user/firebase-uid uid :user/email email :user/status :active}])
   (when tenant-id
     (membership/create! uid tenant-id))
   uid)
@@ -132,11 +132,11 @@
     (rbac/seed-roles!)
     (let [tid (seed-tenant! "Role School")]
       (seed-user! "u-role" "role@school.ac.za" tid)
-      (rbac/grant-role! [:user/firebase-uid "u-role"] :role.name/event-manager :actor "actor-uid")
+      (rbac/grant-role! "u-role" :role.name/event-manager :actor "actor-uid")
       (let [members (user/list-by-tenant tid)
             roles (map :role/name (:user/roles (first members)))]
         (is (some #{:role.name/event-manager} roles)))
-      (rbac/revoke-role! [:user/firebase-uid "u-role"] :role.name/event-manager :actor "actor-uid")
+      (rbac/revoke-role! "u-role" :role.name/event-manager :actor "actor-uid")
       (let [members (user/list-by-tenant tid)
             roles (map :role/name (:user/roles (first members)))]
         (is (not (some #{:role.name/event-manager} roles)))))))

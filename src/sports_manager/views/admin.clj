@@ -18,50 +18,48 @@
 
 (defn home
   "Signed-in landing page."
-  [user events memberships active-tid]
-  (let [active-membership (first (filter #(= active-tid (get-in % [:membership/tenant :tenant/id])) memberships))
-        tenant-name (get-in active-membership [:membership/tenant :tenant/name])]
-    (shared/doc "Sports Manager"
-                [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
-                 [:div.flex.flex-col.gap-1
-                  (when tenant-name
-                    [:span.text-xs.font-medium.uppercase.tracking-wider.opacity-50 tenant-name])
-                  [:nav.flex.flex-wrap.gap-x-6.gap-y-2.text-sm
-                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/users"} "Manage users"]
-                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/school/sports"} "Sports"]
-                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/disputes"} "Disputes"]
-                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/audit"} "Audit log"]
-                   (when (> (count memberships) 1)
-                     [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/select-tenant"} "Switch org"])]]
-                 [:div.flex.items-center.gap-4
-                  [:span.text-sm.opacity-60
-                   (or (:user/name user) (:user/email user))]
-                  [:form {:method "post" :action "/auth/logout"}
-                   (shared/csrf-field)
-                   [:button.btn.btn-sm.btn-ghost {:type "submit"} "Sign out"]]]]
-                [:section
-                 [:div.flex.items-center.justify-between.mb-4
-                  [:h2.text-xl.font-semibold.m-0 "Events"]
-                  [:a.btn.btn-primary.btn-sm {:href "/events/create"} "+ New event"]]]
-                (if (seq events)
-                  [:ul.flex.flex-col.gap-3
-                   (for [e events]
-                     [:li
-                      [:a.block.rounded-xl.border.border-base-300.bg-base-200.hover:bg-base-300.transition-colors.p-4.no-underline
-                       {:href (str "/events/" (:event/id e))}
-                       [:div.flex.items-center.gap-3
-                        [:span.font-semibold.text-base.flex-1 (:event/name e)]
-                        (shared/event-status-badge (:event/status e))
-                        (when-let [d (:event/start-at e)]
-                          [:span.text-xs.opacity-50
-                           (.format (java.text.SimpleDateFormat. "d MMM yyyy") d)])]]])]
-                  [:p.opacity-50.text-sm "No events yet. Create your first event above."]))))
+  [user events memberships _active-tid & [{:keys [tenant-name]}]]
+  (shared/doc "Sports Manager"
+              [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
+               [:div.flex.flex-col.gap-1
+                (when tenant-name
+                  [:span.text-xs.font-medium.uppercase.tracking-wider.opacity-50 tenant-name])
+                [:nav.flex.flex-wrap.gap-x-6.gap-y-2.text-sm
+                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/users"} "Manage users"]
+                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/school/sports"} "Sports"]
+                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/disputes"} "Disputes"]
+                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/audit"} "Audit log"]
+                 (when (> (count memberships) 1)
+                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/select-tenant"} "Switch org"])]]
+               [:div.flex.items-center.gap-4
+                [:span.text-sm.opacity-60
+                 (or (:user/name user) (:user/email user))]
+                [:form {:method "post" :action "/auth/logout"}
+                 (shared/csrf-field)
+                 [:button.btn.btn-sm.btn-ghost {:type "submit"} "Sign out"]]]]
+              [:section
+               [:div.flex.items-center.justify-between.mb-4
+                [:h2.text-xl.font-semibold.m-0 "Events"]
+                [:a.btn.btn-primary.btn-sm {:href "/events/create"} "+ New event"]]]
+              (if (seq events)
+                [:ul.flex.flex-col.gap-3
+                 (for [e events]
+                   [:li
+                    [:a.block.rounded-xl.border.border-base-300.bg-base-200.hover:bg-base-300.transition-colors.p-4.no-underline
+                     {:href (str "/events/" (:event/id e))}
+                     [:div.flex.items-center.gap-3
+                      [:span.font-semibold.text-base.flex-1 (:event/name e)]
+                      (shared/event-status-badge (:event/status e))
+                      (when-let [d (:event/start-at e)]
+                        [:span.text-xs.opacity-50
+                         (.format (java.text.SimpleDateFormat. "d MMM yyyy") d)])]]])]
+                [:p.opacity-50.text-sm "No events yet. Create your first event above."])))
 
 (defn users-list
   "Users management page. `tenant-users` is the list of user entity maps.
   `all-roles` is a seq of role-name keywords."
-  [current-user tenant-users all-roles & [{:keys [add-errors add-email]
-                                           :or {add-errors {}}}]]
+  [current-user tenant-users all-roles & [{:keys [add-errors add-email pending-invites invited?]
+                                           :or {add-errors {} pending-invites []}}]]
   (shared/doc "Manage users — Sports Manager"
               [:div#toast]
               [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
@@ -74,6 +72,9 @@
                 [:form {:method "post" :action "/auth/logout"}
                  (shared/csrf-field)
                  [:button.btn.btn-sm.btn-ghost {:type "submit"} "Sign out"]]]]
+              (when invited?
+                [:div.alert.alert-success.mb-6
+                 [:span "Invite sent. They'll be added automatically when they sign in."]])
               [:section.mb-8
                [:h2.text-xl.font-semibold.mb-4 "Team members"]
                (if (seq tenant-users)
@@ -101,9 +102,17 @@
                            (role-checkbox rn (contains? user-roles rn)))]
                         [:button.btn.btn-sm.btn-primary {:type "submit"} "Save roles"]]]))]
                  [:p.opacity-50 "No team members yet."])]
+              (when (seq pending-invites)
+                [:section.mb-8
+                 [:h2.text-xl.font-semibold.mb-4 "Pending invites"]
+                 [:div.flex.flex-col.gap-2
+                  (for [inv (sort-by :invite/email pending-invites)]
+                    [:div.rounded-xl.border.border-base-300.bg-base-200.p-3.flex.items-center.justify-between
+                     [:span.text-sm (:invite/email inv)]
+                     [:span.badge.badge-outline.badge-sm "Awaiting sign-in"]])]])
               [:section
                [:h2.text-xl.font-semibold.mb-1 "Add a team member"]
-               [:p.text-sm.opacity-60.mb-4 "They must have signed in to Sports Manager at least once before you can add them."]
+               [:p.text-sm.opacity-60.mb-4 "Enter their email. If they already have an account they'll be added immediately; otherwise they'll join automatically when they sign in."]
                [:form {:method "post" :action "/users/add"}
                 (shared/csrf-field)
                 [:div.flex.flex-wrap.gap-3.items-end
@@ -116,8 +125,6 @@
                   (when-let [e (:email add-errors)]
                     [:label.label [:span.label-text-alt.text-error e]])]
                  [:button.btn {:type "submit"} "Add user"]]
-                (when-let [e (:not-found add-errors)]
-                  [:p.text-error.mt-2 e])
                 (when-let [e (:other-tenant add-errors)]
                   [:p.text-error.mt-2 e])]]))
 

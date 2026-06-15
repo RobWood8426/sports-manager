@@ -17,20 +17,19 @@
 
 (defn find-by-email
   "Returns the user entity map for `email`, or nil if not found.
-  Pulls only identity attributes — not tenant/roles."
+  Pulls only identity attributes -- not tenant/roles."
   [email]
-  (let [e (db/pull [:user/firebase-uid :user/email :user/name :user/status]
-                   [:user/email email])]
-    (when (:user/firebase-uid e) e)))
+  (when-let [uid (ffirst (db/q '{:find [?uid] :in [?e] :where [[?u :user/email ?e] [?u :user/firebase-uid ?uid]]} email))]
+    (db/pull [:user/firebase-uid :user/email :user/name :user/status] uid)))
 
 (defn list-by-tenant
   "Returns all users with an active membership in `tenant-id` (a UUID),
-  each with their roles pulled."
+  each with their roles pulled as nested maps."
   [tenant-id]
   (mapv (fn [m]
           (db/pull [:user/firebase-uid :user/email :user/name :user/status
-                    {:user/roles [:role/name]}]
-                   [:user/firebase-uid (:user/firebase-uid m)]))
+                    {:user/roles [:role/id :role/name :role/permissions]}]
+                   (:user/firebase-uid m)))
         (membership/list-active-by-tenant tenant-id)))
 
 ;; ---------------------------------------------------------------------------

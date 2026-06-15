@@ -22,20 +22,19 @@
 
 (defn- seed-tenant! [tenant-name]
   (let [tid (UUID/randomUUID)]
-    (db/transact! [{:tenant/id tid :tenant/name tenant-name :tenant/status :active}])
+    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name tenant-name :tenant/status :active}])
     tid))
 
 (defn- seed-user! [uid email tenant-id]
-  (db/transact! [{:user/firebase-uid uid :user/email email :user/status :active}])
+  (db/put-many! [{:xt/id uid :user/firebase-uid uid :user/email email :user/status :active}])
   (when tenant-id
     (membership/create! uid tenant-id))
   uid)
 
 (defn- find-user-from-test-db [uid]
   (when uid
-    (let [e (db/pull [:user/firebase-uid :user/email :user/name :user/status
-                      {:user/roles [:role/name {:role/permissions [:db/ident]}]}]
-                     [:user/firebase-uid uid])]
+    (let [e (db/pull [:user/firebase-uid :user/email :user/name :user/status :user/roles]
+                     uid)]
       (when (:user/firebase-uid e) e))))
 
 (defn- do-req
@@ -148,7 +147,7 @@
     (let [tid (seed-tenant! "Roles School")]
       (seed-user! "uid-adm4" "adm4@x.com" tid)
       (seed-user! "uid-target" "target@x.com" tid)
-      (rbac/grant-role! [:user/firebase-uid "uid-target"] :role.name/event-manager :actor "uid-adm4")
+      (rbac/grant-role! "uid-target" :role.name/event-manager :actor "uid-adm4")
       (let [resp (POST "/users/uid-target/roles" "uid-adm4" {"roles" "finance"} tid)]
         (is (= 200 (:status resp))))
       (let [target (->> (user/list-by-tenant tid)
@@ -164,7 +163,7 @@
     (let [tid (seed-tenant! "Empty Roles School")]
       (seed-user! "uid-adm5" "adm5@x.com" tid)
       (seed-user! "uid-tgt2" "tgt2@x.com" tid)
-      (rbac/grant-role! [:user/firebase-uid "uid-tgt2"] :role.name/finance :actor "uid-adm5")
+      (rbac/grant-role! "uid-tgt2" :role.name/finance :actor "uid-adm5")
       (POST "/users/uid-tgt2/roles" "uid-adm5" {} tid)
       (let [target (->> (user/list-by-tenant tid)
                         (filter #(= "uid-tgt2" (:user/firebase-uid %)))

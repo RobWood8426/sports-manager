@@ -20,7 +20,8 @@
       [:link {:rel "stylesheet" :href "/css/app.css"}]]
      [:body
       [:header [:h1 [:a {:href "/" :style "text-decoration:none;color:inherit"} "Sports Manager"]]]
-      (into [:main] body)]])))
+      (into [:main] body)
+      [:script {:src "/js/form-spinner.js"}]]])))
 
 (defn doc-public
   "Full HTML document for public (unauthenticated) pages — no admin header."
@@ -48,7 +49,7 @@
 
 (defn field
   "A labelled form input. Shows an inline error when `errors` contains the field key."
-  [errors field-key label & [{:keys [type placeholder required?]
+  [errors field-key label & [{:keys [type placeholder required? value]
                               :or {type "text" required? false}}]]
   [:div.form-control
    [:label.label
@@ -59,7 +60,8 @@
              :name (name field-key)
              :type type}
       placeholder (assoc :placeholder placeholder)
-      required? (assoc :required true))]
+      required? (assoc :required true)
+      value (assoc :value value))]
    (when-let [err (get errors field-key)]
      [:label.label [:span.label-text-alt.text-error err]])])
 

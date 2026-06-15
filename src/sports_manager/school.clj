@@ -43,7 +43,7 @@
                     :tenant/contact-phone :tenant/website
                     :tenant/latitude :tenant/longitude
                     :tenant/created-at]
-                   [:tenant/id tenant-id])]
+                   tenant-id)]
     (when (:tenant/id e) e)))
 
 ;; ---------------------------------------------------------------------------
@@ -59,24 +59,25 @@
   [user-uid profile]
   (let [tenant-id (UUID/randomUUID)
         now (Date/from (Instant/now))
-        tx-data [(merge {:tenant/id tenant-id
-                         :tenant/status :active
-                         :tenant/created-at now}
-                        (select-keys profile [:tenant/name
-                                              :tenant/address
-                                              :tenant/city
-                                              :tenant/province
-                                              :tenant/country
-                                              :tenant/contact-email
-                                              :tenant/contact-phone
-                                              :tenant/website
-                                              :tenant/latitude
-                                              :tenant/longitude]))]]
+        doc (merge {:xt/id tenant-id
+                    :tenant/id tenant-id
+                    :tenant/status :active
+                    :tenant/created-at now}
+                   (select-keys profile [:tenant/name
+                                         :tenant/address
+                                         :tenant/city
+                                         :tenant/province
+                                         :tenant/country
+                                         :tenant/contact-email
+                                         :tenant/contact-phone
+                                         :tenant/website
+                                         :tenant/latitude
+                                         :tenant/longitude]))]
     (log/info "Creating school tenant" (:tenant/name profile) "for user" user-uid)
-    (db/transact! tx-data)
+    (db/put! doc)
     (membership/create! user-uid tenant-id :actor user-uid)
     (let [tenant (find-by-id tenant-id)]
-      (rbac/grant-role! [:user/firebase-uid user-uid] :role.name/school-admin :actor user-uid)
+      (rbac/grant-role! user-uid :role.name/school-admin :actor user-uid)
       (log/info "School created:" tenant-id)
       tenant)))
 
@@ -85,8 +86,6 @@
   [tenant-id profile]
   (let [updatable [:tenant/name :tenant/address :tenant/city :tenant/province
                    :tenant/country :tenant/contact-email :tenant/contact-phone
-                   :tenant/website :tenant/latitude :tenant/longitude]
-        tx-data [(merge {:db/id [:tenant/id tenant-id]}
-                        (select-keys profile updatable))]]
-    (db/transact! tx-data)
+                   :tenant/website :tenant/latitude :tenant/longitude]]
+    (db/merge! tenant-id (select-keys profile updatable))
     (find-by-id tenant-id)))

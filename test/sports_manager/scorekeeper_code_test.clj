@@ -21,9 +21,8 @@
   (st/seed-templates!)
   (let [tid (UUID/randomUUID)
         uid "actor"]
-    (db/transact! [{:db/id "t" :tenant/id tid :tenant/name "Test School" :tenant/status :active}
-                   {:user/firebase-uid uid :user/email "a@x.com" :user/status :active
-                    :user/tenant "t"}])
+    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "Test School" :tenant/status :active}
+                   {:xt/id uid :user/firebase-uid uid :user/email "a@x.com" :user/status :active}])
     (let [ev (event/create! tid uid
                             {:event/name "Sports Day"
                              :event/start-at #inst "2026-09-01T08:00"
@@ -323,9 +322,8 @@
     (st/seed-templates!)
     (let [tid (UUID/randomUUID)
           uid "actor"]
-      (db/transact! [{:db/id "t2" :tenant/id tid :tenant/name "Past School" :tenant/status :active}
-                     {:user/firebase-uid uid :user/email "past@x.com" :user/status :active
-                      :user/tenant "t2"}])
+      (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "Past School" :tenant/status :active}
+                     {:xt/id uid :user/firebase-uid uid :user/email "past@x.com" :user/status :active}])
       (let [ev (event/create! tid uid
                               {:event/name "Past Day"
                                :event/start-at #inst "2020-01-01T08:00"
@@ -357,9 +355,8 @@
     (st/seed-templates!)
     (let [tid (UUID/randomUUID)
           uid "actor"]
-      (db/transact! [{:db/id "t3" :tenant/id tid :tenant/name "Past School 2" :tenant/status :active}
-                     {:user/firebase-uid uid :user/email "past2@x.com" :user/status :active
-                      :user/tenant "t3"}])
+      (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "Past School 2" :tenant/status :active}
+                     {:xt/id uid :user/firebase-uid uid :user/email "past2@x.com" :user/status :active}])
       (let [ev (event/create! tid uid
                               {:event/name "Past Day 2"
                                :event/start-at #inst "2020-02-01T08:00"

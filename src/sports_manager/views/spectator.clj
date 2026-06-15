@@ -103,7 +103,6 @@
   "Public live score detail page for a single fixture."
   [fixture]
   (let [fmt (java.text.SimpleDateFormat. "d MMM HH:mm")
-        now (java.util.Date.)
         fid (str (:fixture/id fixture))
         score (:fixture/live-score fixture)
         final-status (:fixture/final-score-status fixture)

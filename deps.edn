@@ -1,11 +1,5 @@
 {:paths ["src" "resources"]
 
- ;; Datomic Pro is published to the my.datomic.com repo, not Central. Resolving
- ;; com.datomic/peer requires license credentials — put them in
- ;; ~/.clojure/deps.edn (or the DATOMIC_* env) per docs/datomic.md.
- :mvn/repos
- {"my.datomic.com" {:url "https://my.datomic.com/repo"}}
-
  :deps
  {org.clojure/clojure        {:mvn/version "1.12.0"}
 
@@ -18,10 +12,9 @@
   ;; --- HTML (HTMX-friendly server-rendered pages) ---
   hiccup/hiccup              {:mvn/version "2.0.0-RC3"}
 
-  ;; --- Database (Datomic Pro peer; mem:// for dev/test, SQL transactor in prod) ---
-  ;; Matches the stub-server setup. Resolving com.datomic/peer needs the
-  ;; my.datomic.com Maven repo (configured below) + license creds. See docs/datomic.md.
-  com.datomic/peer           {:mvn/version "1.0.7469"}
+  ;; --- Database (XTDB v1 open-source; in-memory for dev/test, RocksDB-backed in prod) ---
+  com.xtdb/xtdb-core         {:mvn/version "1.24.4"}
+  com.xtdb/xtdb-rocksdb      {:mvn/version "1.24.4"}
 
   ;; --- Auth (Firebase Admin SDK for ID-token verification; buddy for cookie signing) ---
   com.google.firebase/firebase-admin {:mvn/version "9.2.0"}
@@ -77,4 +70,9 @@
   ;; Linting: clojure -M:lint
   :lint
   {:replace-deps {clj-kondo/clj-kondo {:mvn/version "2024.11.14"}}
-   :main-opts    ["-m" "clj-kondo.main" "--lint" "src" "test"]}}}
+   :main-opts    ["-m" "clj-kondo.main" "--lint" "src" "test"]}
+
+  ;; Uberjar: clojure -T:build uber
+  :build
+  {:deps       {io.github.clojure/tools.build {:mvn/version "0.10.5"}}
+   :ns-default build}}}

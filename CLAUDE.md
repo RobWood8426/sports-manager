@@ -81,30 +81,51 @@ Before reporting a task as done:
 
 Always verify fixes at runtime (REPL eval or test run) before considering a task complete. Do not spend extended time tracing code paths without checking actual behavior.
 
-## Datomic Pitfalls
+## XTDB Pitfalls
 
-### Tempids for Same-Transaction References
+### :xt/id IS the Business Key
 
-When creating a new entity AND referencing it in the same transaction, use a **string tempid** as `:db/id`. Lookup refs only resolve against already-committed entities — they fail with `tempid-not-an-entity` for entities created in the same transaction.
+Every document's `:xt/id` is its business key UUID (or keyword for sport-templates). Never use lookup refs like `[:event/id uuid]` — pass the UUID directly to `db/pull`, `db/entity`, `db/exists?`, `db/merge!`, `db/delete!`.
 
 ```clojure
-;; WRONG — lookup ref can't resolve an entity being created in this txn
-[{:foo/id "x" :foo/val 1}
- {:db/id [:bar/id "y"] :bar/foos [:foo/id "x"]}]
+;; WRONG
+(db/pull pattern [:event/id event-id])
 
-;; CORRECT — string tempid resolves within the transaction
-(let [t "foo-x"]
-  [{:db/id t :foo/id "x" :foo/val 1}
-   {:db/id [:bar/id "y"] :bar/foos t}])
+;; CORRECT
+(db/pull pattern event-id)
 ```
 
-### Pull on Non-Existent Lookup Refs
+### put Replaces the Whole Document
 
-`d/pull` with `[*]` on a non-existent lookup ref returns `{:db/id nil}`, not `nil`. With specific attrs it returns `nil`. Guard accordingly.
+`db/put!` and `[::xt/put doc]` replace the entire document. For partial updates, use `db/merge!` (read-modify-write) or `db/retract-attrs!`. Never build a partial map and put it — you will lose existing fields.
+
+### Queries Return Sets of Tuples
+
+`db/q` returns `#{[v1 v2 ...] ...}`. Extract values with `(map first ...)` for single-column results, or destructure for multi-column. Don't treat the result as a sequence of scalars.
+
+```clojure
+;; single column
+(map first (db/q '{:find [?id] :in [?tid] :where [[?e :event/tenant ?tid] [?e :event/id ?id]]} tenant-id))
+
+;; scalar shortcut (ffirst)
+(ffirst (db/q '{:find [?id] :in [?code] :where [[?e :event/code ?code] [?e :event/id ?id]]} code))
+```
+
+### No Referential Integrity
+
+XTDB does not enforce refs. Dangling references silently return nil. Guard with `db/exists?` before storing a ref if the target might not exist.
+
+### Composite :xt/id for Memberships
+
+Membership `:xt/id` is `[firebase-uid tenant-id]` — a vector. Use `(db/entity [uid tid])` for direct lookup. Don't query for membership eids.
+
+### await-tx is Always Called
+
+`db/submit!` always calls `xt/await-tx` before returning, so reads immediately after writes see the new data. Don't add extra waits.
 
 ### Multi-Tenancy
 
-Every tenant-scoped entity carries `:tenant/id`. All tenant-scoped queries MUST go through `db/tenant-scoped` — never query tenant data without filtering on it.
+Every tenant-scoped entity carries `:entity/tenant` (e.g. `:event/tenant`, `:fixture/tenant`). Use `db/tenant-scoped` — never query tenant data without filtering on it. `tenant-scoped` takes `tenant-attr` as first arg (e.g. `:event/tenant`) since XTDB has no shared tenant entity to join through.
 
 ## Architecture Notes
 

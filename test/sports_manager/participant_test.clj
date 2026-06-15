@@ -22,15 +22,15 @@
   (rbac/seed-roles!)
   (let [tid (UUID/randomUUID)
         uid "test-uid-par"]
-    (db/transact!
-     [{:tenant/id tid :tenant/name "Test School"
+    (db/put-many!
+     [{:xt/id tid :tenant/id tid :tenant/name "Test School"
        :tenant/status :active :tenant/contact-email "a@b.com"
        :tenant/created-at (java.util.Date.)}
-      {:user/firebase-uid uid :user/email "par@test.com"
+      {:xt/id uid :user/firebase-uid uid :user/email "par@test.com"
        :user/status :active
        :user/created-at (java.util.Date.)}])
     (membership/create! uid tid)
-    (rbac/grant-role! [:user/firebase-uid uid] :role.name/school-admin :actor uid)
+    (rbac/grant-role! uid :role.name/school-admin :actor uid)
     {:tenant-id tid :uid uid}))
 
 (defn- seed-event! [tenant-id uid]
@@ -107,9 +107,8 @@
 
 (defn- find-user-from-test-db [uid]
   (db/pull
-   [:user/firebase-uid :user/email :user/name :user/status
-    {:user/roles [{:role/permissions [:db/ident]} :role/name]}]
-   [:user/firebase-uid uid]))
+   [:user/firebase-uid :user/email :user/name :user/status :user/roles]
+   uid))
 
 (defn- do-req
   ([method uri uid] (do-req method uri uid {} nil))

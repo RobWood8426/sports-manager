@@ -41,14 +41,18 @@
         (empty? memberships)
         (resp/redirect "/school/setup")
 
-        (and active-tid (some #(= active-tid (get-in % [:membership/tenant :tenant/id])) memberships))
-        (let [user (auth/find-user uid)]
-          (shared/html (views.admin/home user (event/list-by-tenant active-tid) memberships active-tid)))
+        (and active-tid (some #(= active-tid (:membership/tenant %)) memberships))
+        (let [user (auth/find-user uid)
+              tenant-name (:tenant/name (school/find-by-id active-tid))]
+          (shared/html (views.admin/home user (event/list-by-tenant active-tid) memberships active-tid
+                                         {:tenant-name tenant-name})))
 
         (= 1 (count memberships))
-        (let [tid (get-in (first memberships) [:membership/tenant :tenant/id])
-              user (auth/find-user uid)]
-          (-> (shared/html (views.admin/home user (event/list-by-tenant tid) memberships tid))
+        (let [tid (:membership/tenant (first memberships))
+              user (auth/find-user uid)
+              tenant-name (:tenant/name (school/find-by-id tid))]
+          (-> (shared/html (views.admin/home user (event/list-by-tenant tid) memberships tid
+                                             {:tenant-name tenant-name}))
               (session/set-active-tenant tid)))
 
         :else
@@ -56,8 +60,9 @@
     (login-page request)))
 
 (defn school-setup-page [request]
-  (if (:uid request)
-    (shared/html (views.auth/school-setup))
+  (if-let [uid (:uid request)]
+    (let [email (:user/email (auth/find-user uid))]
+      (shared/html (views.auth/school-setup {:email email})))
     (resp/redirect "/login")))
 
 (defn school-setup-submit

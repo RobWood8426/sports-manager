@@ -18,9 +18,8 @@
   (st/seed-templates!)
   (let [tid (UUID/randomUUID)
         uid "actor"]
-    (db/transact! [{:db/id "t" :tenant/id tid :tenant/name "Test School" :tenant/status :active}
-                   {:user/firebase-uid uid :user/email "a@x.com" :user/status :active
-                    :user/tenant "t"}])
+    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "Test School" :tenant/status :active}
+                   {:xt/id uid :user/firebase-uid uid :user/email "a@x.com" :user/status :active}])
     (let [ev (event/create! tid uid
                             {:event/name "Sports Day"
                              :event/start-at #inst "2026-09-01T08:00"
@@ -41,7 +40,7 @@
                                      :venue/type :venue.type/field})]
       (is (uuid? (:venue/id v)))
       (is (= "Main Field" (:venue/name v)))
-      (is (= :venue.type/field (get-in v [:venue/type :db/ident]))))))
+      (is (= :venue.type/field (:venue/type v))))))
 
 (deftest find-by-id-returns-nil-for-unknown
   (testing "find-by-id returns nil for a non-existent UUID"

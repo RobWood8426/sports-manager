@@ -1,39 +1,18 @@
 (ns sports-manager.config
-  "Environment-driven configuration. Mirrors the env-var approach used in
-  stub-server, scoped with an SM_ prefix. All keys are optional in dev; the
-  defaults give an in-memory Datomic db so a bare `clojure -M:run` boots.
+  "Environment-driven configuration. All keys are optional in dev; the defaults
+  give an in-memory XTDB node so a bare `clojure -M:run` boots without setup.
 
   Values come from `dotenv/get-env` (real process env wins over ./.env)."
   (:require [sports-manager.dotenv :refer [get-env]]))
 
-(def datomic-uri
-  "Full Datomic connection string. If set, overrides every other datomic-* key.
-   e.g. datomic:mem://sports-manager-dev
-        datomic:dev://localhost:4334/sports-manager
-        datomic:sql://sports-manager?jdbc:postgresql://host:5432/datomic?user=..&password=..&ssl=true"
-  (get-env "SM_DATOMIC_URI"))
-
-(def datomic-database
-  "Logical database name. Defaults to a dev db."
-  (or (get-env "SM_DATOMIC_DATABASE") "sports-manager-dev"))
-
-(def datomic-use-transactor?
-  "When true, connect via the dev:// transactor protocol instead of mem://."
-  (= "true" (get-env "SM_DATOMIC_USE_TRANSACTOR")))
-
-(def datomic-transactor-host (or (get-env "SM_DATOMIC_TRANSACTOR_HOST") "localhost"))
-(def datomic-transactor-port (or (get-env "SM_DATOMIC_TRANSACTOR_PORT") "4334"))
-
-;; --- Production SQL storage (PostgreSQL-backed transactor) ---
-(def datomic-host (get-env "SM_DATOMIC_HOST"))
-(def datomic-port (or (get-env "SM_DATOMIC_PORT") "5432"))
-(def datomic-db (or (get-env "SM_DATOMIC_DB") "datomic"))
-(def datomic-user (get-env "SM_DATOMIC_USER"))
-(def datomic-password (get-env "SM_DATOMIC_PASSWORD"))
+(def xtdb-data-dir
+  "Path to the XTDB RocksDB data directory (prod only).
+  Defaults to ./data/xtdb — override with SM_XTDB_DATA_DIR."
+  (or (get-env "SM_XTDB_DATA_DIR") "data/xtdb"))
 
 (def prod?
-  "Treat anything whose database name contains \"prod\" as production."
-  (boolean (and datomic-database (.contains ^String datomic-database "prod"))))
+  "True when SM_ENV=production."
+  (= "production" (get-env "SM_ENV")))
 
 ;; --- Firebase auth ---
 (def google-application-credentials

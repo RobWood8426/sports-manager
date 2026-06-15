@@ -1,6 +1,6 @@
 (ns sports-manager.auth
   "Firebase authentication: initialise the Admin SDK, verify ID tokens, and map
-  a verified uid to a Datomic user. We use the real Firebase Admin SDK
+  a verified uid to an XTDB user. We use the real Firebase Admin SDK
   (com.google.firebase) for token verification — initialised from this
   project's service-account JSON.
 
@@ -9,7 +9,8 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [sports-manager.config :as config]
-            [sports-manager.db :as db])
+            [sports-manager.db :as db]
+            [sports-manager.invite :as invite])
   (:import (com.google.auth.oauth2 GoogleCredentials)
            (com.google.firebase FirebaseApp FirebaseOptions)
            (com.google.firebase.auth FirebaseAuth)))
@@ -50,32 +51,39 @@
   (when (and token @initialised?)
     (try
       (let [decoded (-> (FirebaseAuth/getInstance) (.verifyIdToken token))]
-        {:uid   (.getUid decoded)
+        {:uid (.getUid decoded)
          :email (.getEmail decoded)
-         :name  (.getName decoded)})
+         :name (.getName decoded)})
       (catch Exception e
         (log/debug e "ID token verification failed")
         nil))))
 
 (defn find-user
   "Pull the user entity for a Firebase uid, or nil.
-  Includes roles and their permissions so callers can use rbac/has-permission?."
+  :xt/id IS the firebase-uid string — pull directly by uid.
+  Includes tenant UUID and role UUIDs (flat scalars, not nested joins)."
   [uid]
   (when uid
     (let [e (db/pull [:user/firebase-uid :user/email :user/name
                       :user/status
-                      {:user/tenant [:tenant/id :tenant/name]}
-                      {:user/roles [:role/name {:role/permissions [:db/ident]}]}]
-                     [:user/firebase-uid uid])]
+                      :user/tenant
+                      :user/roles]
+                     uid)]
       (when (:user/firebase-uid e) e))))
 
 (defn upsert-user!
-  "Create the user on first sign-in (idempotent via :user/firebase-uid identity),
-  updating email/name from the token claims. Tenant assignment is handled
-  separately (invite/onboarding flow) — a brand-new user has no tenant yet."
+  "Create the user on first sign-in, or update email/name from token claims.
+  Uses db/put! for new users, db/merge! for existing.
+  Tenant assignment is handled separately (invite/onboarding flow)."
   [{:keys [uid email name]}]
-  (db/transact! [(cond-> {:user/firebase-uid uid
-                          :user/status       :active}
-                   email (assoc :user/email email)
-                   name  (assoc :user/name name))])
-  (find-user uid))
+  (let [attrs (cond-> {:user/firebase-uid uid
+                       :user/status :active}
+                email (assoc :user/email email)
+                name (assoc :user/name name))
+        new-user? (not (db/exists? uid))]
+    (if new-user?
+      (db/put! (assoc attrs :xt/id uid))
+      (db/merge! uid attrs))
+    (when new-user?
+      (invite/redeem-pending! uid email))
+    (find-user uid)))

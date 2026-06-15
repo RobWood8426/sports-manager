@@ -1,114 +1,169 @@
 (ns sports-manager.db
-  "Datomic connection lifecycle, schema install, and thin query/transaction
-  helpers. Adapted from the stub-server pattern (com.datomic/peer) for this
-  deps.edn repo: defaults to an in-memory db so a bare boot needs no transactor.
+  "XTDB v1 node lifecycle and thin query/transaction helpers.
 
-  Connection is held in a `defonce` atom and is idempotent to start. Prod uses a
-  SQL-backed transactor configured entirely through env vars (see config.clj)."
+  Identity model: every entity's existing business key (:fixture/id,
+  :user/firebase-uid, :sport-template/code, etc.) IS its :xt/id. Refs store
+  the target's :xt/id value directly — no numeric eids.
+
+  Dev/test: call (start!) with no args -> fully in-memory node, no files.
+  Prod: SM_ENV=production -> RocksDB-backed node under SM_XTDB_DATA_DIR."
   (:require [clojure.tools.logging :as log]
-            [datomic.api :as d]
             [sports-manager.config :as config]
-            [sports-manager.schema :as schema]))
+            [xtdb.api :as xt])
+  (:import [java.io Closeable]
+           [java.time Duration]))
 
-(defonce ^:private conn (atom nil))
+(defonce ^:private node (atom nil))
 
-(defn uri
-  "Build the Datomic connection URI from config.
-   Precedence: explicit SM_DATOMIC_URI > SQL (prod) > dev transactor > mem://."
-  []
-  (cond
-    config/datomic-uri
-    config/datomic-uri
+;; ---------------------------------------------------------------------------
+;; Node configuration
+;; ---------------------------------------------------------------------------
 
-    config/prod?
-    (format "datomic:sql://%s?jdbc:postgresql://%s:%s/%s?user=%s&password=%s&ssl=true&sslmode=require"
-            config/datomic-database
-            config/datomic-host config/datomic-port config/datomic-db
-            config/datomic-user config/datomic-password)
+(defn- node-config []
+  (if config/prod?
+    (let [dir config/xtdb-data-dir
+          kv (fn [sub] {:xtdb/module 'xtdb.rocksdb/->kv-store
+                        :db-dir (str dir "/" sub)})]
+      {:xtdb/tx-log {:kv-store (kv "tx-log")}
+       :xtdb/document-store {:kv-store (kv "docs")}
+       :xtdb/index-store {:kv-store (kv "index")}})
+    {}))
 
-    config/datomic-use-transactor?
-    (format "datomic:dev://%s:%s/%s"
-            config/datomic-transactor-host config/datomic-transactor-port
-            config/datomic-database)
-
-    :else
-    (str "datomic:mem://" config/datomic-database)))
-
-(defn install-schema!
-  "Transact the schema. Idempotent — Datomic schema is additive, so re-running
-  on every boot is safe and is how we 'migrate'."
-  []
-  (log/info "Installing/updating Datomic schema…")
-  @(d/transact @conn schema/schema)
-  (log/info "Schema install complete."))
+;; ---------------------------------------------------------------------------
+;; Lifecycle
+;; ---------------------------------------------------------------------------
 
 (defn start!
-  "Create the database if needed, connect, install the schema. Idempotent:
-  a no-op if already connected. Returns the connection.
-
-  Pass optional `seed-fns` — zero-arg fns called after schema install, used to
-  seed reference data (e.g. default RBAC roles) without creating a circular dep
-  between db and domain namespaces."
+  "Start the XTDB node. Idempotent. Optional seed-fns (zero-arg) run once
+  after node start -- used to seed reference data without circular deps."
   ([] (start! nil))
   ([seed-fns]
-   (when (nil? @conn)
-     (let [u (uri)]
-       (when (d/create-database u)
-         (log/info "Created Datomic database:" config/datomic-database))
-       (reset! conn (d/connect u))
-       (log/info "Connected to Datomic:" u)
-       (install-schema!)
-       (doseq [f seed-fns] (f))))
-   @conn))
+   (when (nil? @node)
+     (reset! node (xt/start-node (node-config)))
+     (log/info "Started XTDB node" (if config/prod? "(rocksdb)" "(in-memory)"))
+     (doseq [f seed-fns] (f)))
+   @node))
 
 (defn stop!
-  "Release the connection. For mem:// also deletes the database so a restart is
-  clean. Safe to call when nothing is connected."
+  "Close the node. Safe when nothing is running."
   []
-  (when @conn
-    (let [u (uri)]
-      (d/release @conn)
-      (when (.startsWith ^String u "datomic:mem://")
-        (d/delete-database u)))
-    (reset! conn nil)))
+  (when-let [^Closeable n @node]
+    (.close n)
+    (reset! node nil)))
 
-(defn conn* "The live connection (throws if not started)." []
-  (or @conn (throw (ex-info "Datomic not started — call (start!) first" {}))))
+(defn node* "The live node (throws if not started)." []
+  (or @node (throw (ex-info "XTDB not started -- call (start!) first" {}))))
 
-(defn db "A current database value." [] (d/db (conn*)))
+(defn db "A current database snapshot." [] (xt/db (node*)))
 
-;; --- Thin wrappers (stub-server style) so callers don't import datomic.api ---
+;; ---------------------------------------------------------------------------
+;; Query helpers
+;; ---------------------------------------------------------------------------
 
-(defn q       [query & args] (apply d/q query (db) args))
-(defn q-on    [db query & args] (apply d/q query db args))
-(defn pull    [selector eid] (d/pull (db) selector eid))
-(defn entity  [eid] (d/entity (db) eid))
+(defn q
+  "Run a Datalog query against the current db. Extra args bound via :in."
+  [query & args]
+  (apply xt/q (db) query args))
 
-(defn transact!
-  "Transact tx-data against the live connection; deref so callers get the
-  completed tx report. Pass an `:audit` map to also write provenance onto the
-  transaction entity."
-  ([tx-data] @(d/transact (conn*) tx-data))
-  ([tx-data audit]
-   @(d/transact (conn*) (into [(assoc audit :db/id "datomic.tx")] tx-data))))
+(defn q-on
+  "Run a Datalog query against a specific db snapshot."
+  [db-val query & args]
+  (apply xt/q db-val query args))
 
-;; --- Multi-tenancy (SPO-17) -------------------------------------------------
-;; Per-entity isolation: every tenant-scoped query goes through `tenant-scoped`
-;; so the :tenant/id filter can't be forgotten. The query's :find/:where are
-;; spliced in; the entity bound to `?e` is constrained to the given tenant.
+;; ---------------------------------------------------------------------------
+;; Entity / pull helpers
+;; ---------------------------------------------------------------------------
+
+(defn entity
+  "Fetch the full document for :xt/id `id`, or nil if absent."
+  [id]
+  (xt/entity (db) id))
+
+(defn entity-on
+  "Fetch document by :xt/id against a specific db snapshot."
+  [db-val id]
+  (xt/entity db-val id))
+
+(defn pull
+  "EQL pull of `selector` for the entity with :xt/id `id`.
+  Always includes :xt/id so pulled docs can safely be re-put.
+  Returns the projected map, or nil if the entity doesn't exist."
+  [selector id]
+  (when id
+    (let [sel (if (some #{:xt/id} selector)
+                selector
+                (into [:xt/id] selector))]
+      (xt/pull (db) sel id))))
+
+(defn pull-many
+  "EQL pull of `selector` for each id in `ids`."
+  [selector ids]
+  (xt/pull-many (db) selector ids))
+
+(defn exists?
+  "True if an entity with :xt/id `id` currently exists."
+  [id]
+  (some? (xt/entity (db) id)))
+
+;; ---------------------------------------------------------------------------
+;; Write helpers
+;; ---------------------------------------------------------------------------
+
+(defn- await-tx [tx]
+  (xt/await-tx (node*) tx (Duration/ofSeconds 30))
+  tx)
+
+(defn submit!
+  "Submit raw XTDB tx-ops and block until indexed.
+  ops is a vector of XTDB ops: [[::xt/put doc] [::xt/delete id] ...]"
+  [ops]
+  (await-tx (xt/submit-tx (node*) ops)))
+
+(defn put!
+  "Upsert a full document. doc must contain :xt/id. Blocks until indexed."
+  [doc]
+  (submit! [[::xt/put doc]]))
+
+(defn put-many!
+  "Upsert multiple documents in a single transaction."
+  [docs]
+  (submit! (mapv (fn [d] [::xt/put d]) docs)))
+
+(defn merge!
+  "Read-modify-write: merge attrs onto the existing doc with :xt/id id.
+  Throws if the entity doesn't exist. Use put! for upsert-or-create."
+  [id attrs]
+  (let [cur (xt/entity (db) id)]
+    (when-not cur
+      (throw (ex-info "Entity not found for update" {:xt/id id})))
+    (submit! [[::xt/put (merge cur attrs)]])))
+
+(defn retract-attrs!
+  "Remove attributes ks from the document with :xt/id id."
+  [id ks]
+  (when-let [cur (xt/entity (db) id)]
+    (submit! [[::xt/put (apply dissoc cur ks)]])))
+
+(defn delete!
+  "Delete the entity with :xt/id id."
+  [id]
+  (submit! [[::xt/delete id]]))
+
+;; ---------------------------------------------------------------------------
+;; Multi-tenancy
+;; ---------------------------------------------------------------------------
 
 (defn tenant-scoped
-  "Run a query already constrained to a tenant. `where` is the where-clauses for
-  your query; every result entity `?e` is forced to belong to `tenant-id`.
-  `find` is the :find spec (defaults to pulling entity ids).
+  "Run a Datalog query scoped to tenant-id. tenant-attr is the attribute
+  linking entities to their tenant (e.g. :event/tenant, :fixture/tenant).
+  find defaults to [?e].
 
-  (tenant-scoped tenant-id
-    '[?e]
-    '[[?e :event/name ?n]])"
-  ([tenant-id where] (tenant-scoped tenant-id '[?e] where))
-  ([tenant-id find where]
-   (let [query (vec (concat [:find] find
-                            '[:in $ ?tid]
-                            [:where '[?e :tenant/id ?tid]]
-                            where))]
-     (d/q query (db) tenant-id))))
+  Example:
+    (tenant-scoped :event/tenant tenant-id '[[?e :event/name ?n]])"
+  ([tenant-attr tenant-id where]
+   (tenant-scoped tenant-attr tenant-id '[?e] where))
+  ([tenant-attr tenant-id find where]
+   (let [query {:find (vec find)
+                :in '[?tid]
+                :where (into [['?e tenant-attr '?tid]] where)}]
+     (xt/q (db) query tenant-id))))

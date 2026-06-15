@@ -96,15 +96,15 @@
   (rbac/seed-roles!)
   (let [tid (UUID/randomUUID)
         uid "test-uid-evt"]
-    (db/transact!
-     [{:tenant/id tid :tenant/name "Test School"
+    (db/put-many!
+     [{:xt/id tid :tenant/id tid :tenant/name "Test School"
        :tenant/status :active :tenant/contact-email "a@b.com"
        :tenant/created-at (java.util.Date.)}
-      {:user/firebase-uid uid :user/email "evt@test.com"
+      {:xt/id uid :user/firebase-uid uid :user/email "evt@test.com"
        :user/status :active
        :user/created-at (java.util.Date.)}])
     (membership/create! uid tid)
-    (rbac/grant-role! [:user/firebase-uid uid] :role.name/school-admin :actor uid)
+    (rbac/grant-role! uid :role.name/school-admin :actor uid)
     {:tenant-id tid :uid uid}))
 
 (deftest create-event-draft
@@ -193,10 +193,8 @@
 
 (defn- find-user-from-test-db [uid]
   (db/pull
-   [:user/firebase-uid :user/email :user/name :user/status
-    {:user/roles [{:role/permissions [:db/ident]}
-                  :role/name]}]
-   [:user/firebase-uid uid]))
+   [:user/firebase-uid :user/email :user/name :user/status :user/roles]
+   uid))
 
 (defn- parse-query-string [qs]
   (if (str/blank? qs)
@@ -290,7 +288,7 @@
     (is (= 200 (:status resp)))
     (is (re-find #"Publish" (:body resp)))
     (is (re-find (re-pattern (:event/code created)) (:body resp)))
-    (is (re-find #"Download QR" (:body resp)))))
+    (is (re-find #"QR Code" (:body resp)))))
 
 (deftest event-publish-route-transitions-and-redirects
   (let [{:keys [tenant-id uid]} (seed-tenant+user!)

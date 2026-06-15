@@ -2,17 +2,16 @@
   "Platform sport templates (SPO-25).
 
   Templates are seeded platform-level entities (no tenant). A school selects
-  which sports they run; the selection is stored as :tenant/sport-templates refs.
-  Templates are immutable reference data — schools never edit them directly."
-  (:require [clojure.set :as set]
-            [clojure.string :as str]
+  which sports they run; the selection is stored as :tenant/sport-templates, a
+  set of sport-template :xt/id keywords. Templates are immutable reference data."
+  (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [datomic.api :as d]
-            [sports-manager.db :as db])
+            [sports-manager.db :as db]
+            [xtdb.api :as xt])
   (:import java.util.UUID))
 
 ;; ---------------------------------------------------------------------------
-;; Seed data — common South African school sports
+;; Seed data -- common South African school sports
 ;; ---------------------------------------------------------------------------
 
 (def ^:private platform-templates
@@ -66,46 +65,41 @@
     :period-labels "Quarter,Quarter,Quarter,Quarter"}])
 
 (defn seed-templates!
-  "Upsert platform sport templates. Idempotent — uses :sport-template/code as identity.
-  On first seed, creates all templates. On subsequent calls, patches any templates
-  that are missing the new SPO-32 fields (scoring-increments, venue-type, period-labels)."
+  "Upsert platform sport templates. Idempotent -- :xt/id is the sport code keyword.
+  New templates are inserted; existing ones are patched if they are missing SPO-32 fields."
   []
-  (let [db (db/db)
-        existing (into {}
-                       (d/q '[:find ?code ?e
-                              :where [?e :sport-template/code ?code]]
-                            db))
-        by-code (into {} (map (juxt :code identity)) platform-templates)
-        new-codes (remove existing (keys by-code))
-        new-tmpl (map by-code new-codes)
-        patch-tmpl (for [[code eid] existing
-                         :let [tmpl (by-code code)]
-                         :when (and tmpl
-                                    (nil? (d/q '[:find ?v . :in $ ?e :where [?e :sport-template/venue-type ?v]]
-                                               db eid)))]
-                     (assoc tmpl :db/id [:sport-template/code code]))]
+  (let [by-code (into {} (map (juxt :code identity)) platform-templates)
+        existing (into #{} (map first)
+                       (db/q '{:find [?code]
+                               :where [[?e :sport-template/code ?code]
+                                       [?e :sport-template/is-template true]]}))
+        new-tmpl (remove #(existing (:code %)) (vals by-code))
+        patch-tmpl (for [code existing
+                         :let [tmpl (by-code code)
+                               doc (db/entity code)]
+                         :when (and tmpl doc (nil? (:sport-template/venue-type doc)))]
+                     tmpl)]
     (when (seq new-tmpl)
       (log/info "Seeding" (count new-tmpl) "new sport templates")
-      (db/transact! (mapv (fn [{:keys [code name scoring-increments venue-type period-labels]}]
-                            (cond-> {:sport-template/id (UUID/randomUUID)
-                                     :sport-template/code code
-                                     :sport-template/name name
-                                     :sport-template/is-template true
-                                     :sport-template/period-labels period-labels
-                                     :sport-template/venue-type venue-type}
-                              scoring-increments
-                              (assoc :sport-template/scoring-increments scoring-increments)))
-                          new-tmpl)))
+      (db/put-many!
+       (mapv (fn [{:keys [code name scoring-increments venue-type period-labels]}]
+               (cond-> {:xt/id code
+                        :sport-template/id (UUID/randomUUID)
+                        :sport-template/code code
+                        :sport-template/name name
+                        :sport-template/is-template true
+                        :sport-template/period-labels period-labels
+                        :sport-template/venue-type venue-type}
+                 scoring-increments
+                 (assoc :sport-template/scoring-increments scoring-increments)))
+             new-tmpl)))
     (when (seq patch-tmpl)
       (log/info "Patching" (count patch-tmpl) "existing sport templates with SPO-32 fields")
-      (db/transact! (mapv (fn [{:keys [db/id scoring-increments venue-type period-labels]}]
-                            (cond-> {:db/id id
-                                     :sport-template/is-template true
-                                     :sport-template/venue-type venue-type
-                                     :sport-template/period-labels period-labels}
-                              scoring-increments
-                              (assoc :sport-template/scoring-increments scoring-increments)))
-                          patch-tmpl)))))
+      (doseq [{:keys [code scoring-increments venue-type period-labels]} patch-tmpl]
+        (db/merge! code (cond-> {:sport-template/venue-type venue-type
+                                 :sport-template/period-labels period-labels}
+                          scoring-increments
+                          (assoc :sport-template/scoring-increments scoring-increments)))))))
 
 ;; ---------------------------------------------------------------------------
 ;; Query
@@ -114,52 +108,27 @@
 (defn list-all
   "Returns all platform sport templates (is-template=true), sorted by name."
   []
-  (->> (d/q '[:find ?id ?code ?name ?incr ?vtype ?periods
-              :where
-              [?e :sport-template/id ?id]
-              [?e :sport-template/code ?code]
-              [?e :sport-template/name ?name]
-              [?e :sport-template/is-template true]
-              [(get-else $ ?e :sport-template/scoring-increments "") ?incr]
-              [(get-else $ ?e :sport-template/venue-type :none) ?vtype]
-              [(get-else $ ?e :sport-template/period-labels "") ?periods]]
-            (db/db))
-       (map (fn [[id code name incr vtype periods]]
-              (cond-> {:sport-template/id id
-                       :sport-template/code code
-                       :sport-template/name name
-                       :sport-template/is-template true}
-                (seq incr) (assoc :sport-template/scoring-increments incr)
-                (not= :none vtype) (assoc :sport-template/venue-type vtype)
-                (seq periods) (assoc :sport-template/period-labels periods))))
+  (->> (db/q '{:find [?code]
+               :where [[?e :sport-template/code ?code]
+                       [?e :sport-template/is-template true]]})
+       (map (comp #(db/entity %) first))
+       (filter some?)
        (sort-by :sport-template/name)))
 
 (defn list-for-tenant
   "Returns platform templates plus this tenant's custom sports, sorted by name."
   [tenant-id]
   (let [platform (list-all)
-        custom (->> (d/q '[:find ?id ?code ?name ?incr ?vtype ?periods
-                           :in $ ?tid
-                           :where
-                           [?t :tenant/id ?tid]
-                           [?e :sport-template/tenant ?t]
-                           [?e :sport-template/is-template false]
-                           [?e :sport-template/id ?id]
-                           [?e :sport-template/code ?code]
-                           [?e :sport-template/name ?name]
-                           [(get-else $ ?e :sport-template/scoring-increments "") ?incr]
-                           [(get-else $ ?e :sport-template/venue-type :none) ?vtype]
-                           [(get-else $ ?e :sport-template/period-labels "") ?periods]]
-                         (db/db) tenant-id)
-                    (map (fn [[id code name incr vtype periods]]
-                           (cond-> {:sport-template/id id
-                                    :sport-template/code code
-                                    :sport-template/name name
-                                    :sport-template/is-template false}
-                             (seq incr) (assoc :sport-template/scoring-increments incr)
-                             (not= :none vtype) (assoc :sport-template/venue-type vtype)
-                             (seq periods) (assoc :sport-template/period-labels periods)))))]
+        custom-codes (map first
+                          (db/q '{:find [?code]
+                                  :in [?tid]
+                                  :where [[?e :sport-template/tenant ?tid]
+                                          [?e :sport-template/is-template false]
+                                          [?e :sport-template/code ?code]]}
+                                tenant-id))
+        custom (mapv #(db/entity %) custom-codes)]
     (->> (concat platform custom)
+         (filter some?)
          (sort-by :sport-template/name))))
 
 (defn validate-custom
@@ -182,55 +151,47 @@
 
 (defn create-custom!
   "Creates a tenant-scoped custom sport and adds it to the tenant's selection.
-  Returns the new sport's UUID."
+  Returns the new sport's code keyword (:xt/id)."
   [tenant-id {:sport-template/keys [name scoring-increments venue-type period-labels]}]
-  (let [tid (str "custom-sport-" (UUID/randomUUID))
-        sport-id (UUID/randomUUID)
+  (let [sport-id (UUID/randomUUID)
         sport-code (keyword "sport" (-> name
                                         str/lower-case
                                         (str/replace #"\s+" "-")
                                         (str/replace #"[^a-z0-9-]" "")
                                         (str "-" (subs (str sport-id) 0 8))))
-        tx (cond-> {:db/id tid
-                    :sport-template/id sport-id
-                    :sport-template/code sport-code
-                    :sport-template/name name
-                    :sport-template/is-template false
-                    :sport-template/tenant [:tenant/id tenant-id]}
-             scoring-increments (assoc :sport-template/scoring-increments scoring-increments)
-             venue-type (assoc :sport-template/venue-type venue-type)
-             period-labels (assoc :sport-template/period-labels period-labels))]
-    (db/transact! [tx {:db/id [:tenant/id tenant-id] :tenant/sport-templates tid}])
-    sport-id))
+        doc (cond-> {:xt/id sport-code
+                     :sport-template/id sport-id
+                     :sport-template/code sport-code
+                     :sport-template/name name
+                     :sport-template/is-template false
+                     :sport-template/tenant tenant-id}
+              scoring-increments (assoc :sport-template/scoring-increments scoring-increments)
+              venue-type (assoc :sport-template/venue-type venue-type)
+              period-labels (assoc :sport-template/period-labels period-labels))
+        tenant (db/entity tenant-id)
+        _ (when-not tenant
+            (throw (ex-info "Tenant not found" {:tenant/id tenant-id})))
+        current-sports (set (:tenant/sport-templates tenant))]
+    (db/submit! [[::xt/put doc]
+                 [::xt/put (assoc tenant :tenant/sport-templates
+                                  (conj current-sports sport-code))]])
+    sport-code))
 
 (defn delete-custom!
-  "Retracts a tenant's custom sport. Throws if not found or belongs to another tenant."
-  [tenant-id sport-id]
-  (let [db (db/db)
-        eid (d/q '[:find ?e .
-                   :in $ ?sid ?tid
-                   :where
-                   [?e :sport-template/id ?sid]
-                   [?e :sport-template/is-template false]
-                   [?e :sport-template/tenant ?t]
-                   [?t :tenant/id ?tid]]
-                 db sport-id tenant-id)]
-    (when-not eid
-      (throw (ex-info "Custom sport not found" {:sport-template/id sport-id :tenant/id tenant-id})))
-    (db/transact! [[:db/retractEntity eid]])))
+  "Deletes a tenant's custom sport. Throws if not found or belongs to another tenant."
+  [tenant-id sport-code]
+  (let [doc (db/entity sport-code)]
+    (when-not (and doc
+                   (not (:sport-template/is-template doc))
+                   (= tenant-id (:sport-template/tenant doc)))
+      (throw (ex-info "Custom sport not found" {:sport-template/code sport-code
+                                                :tenant/id tenant-id})))
+    (db/delete! sport-code)))
 
 (defn selected-codes
-  "Returns the set of :sport-template/code keywords selected by `tenant-id`."
+  "Returns the set of :sport-template/code keywords selected by tenant-id."
   [tenant-id]
-  (into #{}
-        (map first)
-        (d/q '[:find ?code
-               :in $ ?tid
-               :where
-               [?t :tenant/id ?tid]
-               [?t :tenant/sport-templates ?s]
-               [?s :sport-template/code ?code]]
-             (db/db) tenant-id)))
+  (set (:tenant/sport-templates (db/entity tenant-id))))
 
 ;; ---------------------------------------------------------------------------
 ;; Mutation
@@ -238,35 +199,19 @@
 
 (defn set-selection!
   "Replace the tenant's sport template selection with `codes` (a set of
-  :sport-template/code keywords). Only retracts removed sports and only
-  asserts added sports, avoiding same-datom retract+assert conflicts."
+  sport-template code keywords / :xt/ids). Unknown codes are silently dropped."
   [tenant-id codes actor]
-  (let [db (db/db)
-        code->eid (into {}
-                        (map (fn [[eid code]] [code eid]))
-                        (d/q '[:find ?e ?code
-                               :where [?e :sport-template/code ?code]]
-                             db))
-        tenant-eid [:tenant/id tenant-id]
-        current-eids (into #{}
-                           (map first)
-                           (d/q '[:find ?s
-                                  :in $ ?tid
-                                  :where
-                                  [?t :tenant/id ?tid]
-                                  [?t :tenant/sport-templates ?s]]
-                                db tenant-id))
-        new-eids (into #{} (keep code->eid) codes)
-        to-retract (set/difference current-eids new-eids)
-        to-assert (set/difference new-eids current-eids)
-        retracts (mapv #(vector :db/retract tenant-eid :tenant/sport-templates %) to-retract)
-        asserts (mapv #(hash-map :db/id tenant-eid :tenant/sport-templates %) to-assert)
-        tx-data (into retracts asserts)]
-    (log/info "Setting sport templates for tenant" tenant-id ":" codes)
-    (when (seq tx-data)
-      (db/transact! tx-data
-                    {:audit/action :tenant/set-sport-templates
-                     :audit/entity-type :tenant
-                     :audit/actor actor
-                     :audit/after (str codes)}))))
-
+  (let [tenant (db/entity tenant-id)
+        _ (when-not tenant
+            (throw (ex-info "Tenant not found" {:tenant/id tenant-id})))
+        valid (set (filter db/exists? codes))]
+    (log/info "Setting sport templates for tenant" tenant-id ":" valid)
+    (db/merge! tenant-id {:tenant/sport-templates valid})
+    (db/put! {:xt/id (UUID/randomUUID)
+              :audit/id (UUID/randomUUID)
+              :audit/action :tenant/set-sport-templates
+              :audit/entity-type :tenant
+              :audit/entity-id tenant-id
+              :audit/actor actor
+              :audit/tenant tenant-id
+              :audit/after (str valid)})))

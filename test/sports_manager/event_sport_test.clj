@@ -18,9 +18,8 @@
   (st/seed-templates!)
   (let [tid (UUID/randomUUID)
         uid "actor-uid"]
-    (db/transact! [{:db/id "t" :tenant/id tid :tenant/name "Test School" :tenant/status :active}
-                   {:user/firebase-uid uid :user/email "a@x.com" :user/status :active
-                    :user/tenant "t"}])
+    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "Test School" :tenant/status :active}
+                  {:xt/id uid :user/firebase-uid uid :user/email "a@x.com" :user/status :active}])
     (let [ev (event/create! tid uid
                              {:event/name "Test Day"
                               :event/start-at #inst "2026-09-01T09:00"
@@ -164,9 +163,8 @@
     (st/seed-templates!)
     (let [tid (UUID/randomUUID)
           uid "u2"]
-      (db/transact! [{:db/id "t2" :tenant/id tid :tenant/name "No Sport School" :tenant/status :active}
-                     {:user/firebase-uid uid :user/email "b@x.com" :user/status :active
-                      :user/tenant "t2"}])
+      (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "No Sport School" :tenant/status :active}
+                    {:xt/id uid :user/firebase-uid uid :user/email "b@x.com" :user/status :active}])
       (let [ev (event/create! tid uid
                                {:event/name "Empty Day"
                                 :event/start-at #inst "2026-10-01T09:00"

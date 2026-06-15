@@ -85,17 +85,21 @@
 
 (defn school-setup
   "School profile creation form. `errors` is a map of field-key → message."
-  [& [{:keys [errors] :or {errors {}}}]]
+  [& [{:keys [errors email] :or {errors {}}}]]
   (shared/doc "Set up your school — Sports Manager"
               [:div.max-w-2xl.mx-auto
-               [:h2 "Set up your school"]
+               [:div.flex.justify-between.items-center.mb-4
+                [:h2.m-0 "Set up your school"]
+                [:form {:method "post" :action "/auth/logout"}
+                 (shared/csrf-field)
+                 [:button.btn.btn-ghost.btn-sm {:type "submit"} "Sign out"]]]
                [:p "Complete your school profile to get started."]
                [:form {:method "post" :action "/school/setup"}
                 (shared/csrf-field)
                 [:fieldset
                  [:legend "School details"]
                  (shared/field errors :tenant/name "School name" {:required? true})
-                 (shared/field errors :tenant/contact-email "Contact email" {:type "email" :required? true})
+                 (shared/field errors :tenant/contact-email "Contact email" {:type "email" :required? true :value email})
                  (shared/field errors :tenant/contact-phone "Contact phone")
                  (shared/field errors :tenant/website "Website" {:type "url" :placeholder "https://"})]
                 [:fieldset

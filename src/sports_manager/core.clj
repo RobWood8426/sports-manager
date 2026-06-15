@@ -42,7 +42,7 @@
   server instance. Accepts an optional :handler to override the default
   routes/handler (e.g. wrapped with ring.middleware.reload in dev)."
   ([] (start! {}))
-  ([{:keys [port join? handler] :or {port (env-int "PORT" 3000) join? false handler routes.core/handler}}]
+  ([{:keys [port join? handler] :or {port (env-int "PORT" 8080) join? false handler routes.core/handler}}]
    (db/start! [rbac/seed-roles! sport-template/seed-templates!])
    (auth/init!)
    (when-not @server
