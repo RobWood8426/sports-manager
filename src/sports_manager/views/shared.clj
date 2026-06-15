@@ -19,7 +19,11 @@
       [:script {:src "https://unpkg.com/htmx.org@2.0.3"}]
       [:link {:rel "stylesheet" :href "/css/app.css"}]]
      [:body
-      [:header [:h1 [:a {:href "/" :style "text-decoration:none;color:inherit"} "Sports Manager"]]]
+      [:header
+       [:a {:href "/" :class "flex items-center gap-3"
+            :style "text-decoration:none;color:inherit"}
+        [:img {:src "/mark.svg" :alt "" :width "28" :height "28"}]
+        [:h1 "Sports Manager"]]]
       (into [:main] body)
       [:script {:src "/js/form-spinner.js"}]]])))
 
@@ -86,7 +90,7 @@
   (let [s (name status)
         cls (case s
               "published" "badge-success"
-              "draft"     "badge-neutral"
+              "draft" "badge-neutral"
               "cancelled" "badge-ghost"
               "badge-outline")]
     [:span.badge.badge-sm {:class cls} s]))
@@ -97,7 +101,7 @@
   (let [s (name status)
         cls (case s
               "published" "badge-success"
-              "draft"     "badge-neutral"
+              "draft" "badge-neutral"
               "cancelled" "badge-ghost"
               "badge-outline")]
     [:span.badge.badge-sm {:class cls} s]))
@@ -107,9 +111,9 @@
   [status]
   (let [s (name status)
         cls (case s
-              "confirmed"  "badge-success"
-              "invited"    "badge-warning"
-              "withdrawn"  "badge-error"
+              "confirmed" "badge-success"
+              "invited" "badge-warning"
+              "withdrawn" "badge-error"
               "badge-outline")]
     [:span.badge.badge-sm {:class cls} s]))
 
@@ -118,8 +122,8 @@
   [status]
   (let [s (name status)
         cls (case s
-              "active"  "badge-success"
-              "used"    "badge-info"
+              "active" "badge-success"
+              "used" "badge-info"
               "revoked" "badge-ghost"
               "expired" "badge-ghost"
               "badge-outline")]
@@ -131,7 +135,7 @@
   (let [s (name status)
         cls (case s
               "accepted" "badge-success"
-              "pending"  "badge-warning"
+              "pending" "badge-warning"
               "disputed" "badge-error"
               "badge-outline")]
     [:span.badge.badge-sm {:class cls} s]))
@@ -140,10 +144,10 @@
   "DaisyUI badge hiccup for a dashboard bucket keyword."
   [bucket label]
   (let [cls (case bucket
-              :live        "badge-success"
-              :disputed    "badge-error"
-              :pending     "badge-warning"
-              :completed   "badge-info"
+              :live "badge-success"
+              :disputed "badge-error"
+              :pending "badge-warning"
+              :completed "badge-info"
               :no-activity "badge-ghost"
               "badge-outline")]
     [:span.badge.badge-sm {:class cls} label]))
@@ -153,16 +157,16 @@
   live score map (with :fixture/final-score-status, :fixture/start-at, :fixture/end-at)."
   [f]
   (let [now (java.util.Date.)
-        end   (:fixture/end-at f)
+        end (:fixture/end-at f)
         start (:fixture/start-at f)
-        fs    (:fixture/final-score-status f)]
+        fs (:fixture/final-score-status f)]
     (cond
-      (#{:final-score.status/accepted} fs) ["Final"    "text-success font-semibold"]
+      (#{:final-score.status/accepted} fs) ["Final" "text-success font-semibold"]
       (#{:final-score.status/disputed} fs) ["Disputed" "text-error font-semibold"]
-      (#{:final-score.status/pending}  fs) ["Pending"  "text-warning font-semibold"]
-      (and end (.before end now))          ["Ended"    "opacity-50"]
-      (and start (.before start now))      ["Live"     "text-success font-semibold"]
-      :else                                ["Upcoming" "opacity-50"])))
+      (#{:final-score.status/pending} fs) ["Pending" "text-warning font-semibold"]
+      (and end (.before end now)) ["Ended" "opacity-50"]
+      (and start (.before start now)) ["Live" "text-success font-semibold"]
+      :else ["Upcoming" "opacity-50"])))
 
 (defn error-page
   "Generic error page. `status` is the HTTP status code, `message` is human-readable."

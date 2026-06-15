@@ -1,20 +1,119 @@
-/* Base reset — everything else is Tailwind + DaisyUI */
+/* SchoolScore — brand foundation.
+   Translates the SchoolScore Design System (claude.ai/design) onto the app's
+   existing DaisyUI v5 dark theme. Everything below is the design system's
+   foundation layer: brand webfonts, the cool-navy palette + #1a56db blue +
+   rationed "live" green retuned onto DaisyUI's `dark` theme variables, and the
+   four signature utility classes (.ss-label / .ss-card / .ss-score /
+   .ss-live-dot). Individual views keep using DaisyUI utilities and pick up the
+   look automatically. */
+
+/* ---- Webfonts (flagged substitution: repo shipped none) -----------------
+   Archivo (display + scoreboard) · Hanken Grotesk (body/UI) · JetBrains Mono. */
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+/* ====================================================================
+   Design tokens — the SchoolScore foundation, authored in oklch.
+   ==================================================================== */
+:root {
+  /* Families */
+  --ss-font-display: 'Archivo', system-ui, -apple-system, sans-serif;
+  --ss-font-sans:    'Hanken Grotesk', system-ui, -apple-system, sans-serif;
+  --ss-font-mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  /* Map Tailwind v4 font utilities (font-sans / font-mono) onto the brand
+     families so DaisyUI components and `font-mono` codes use them too. */
+  --font-sans: var(--ss-font-sans);
+  --font-mono: var(--ss-font-mono);
+
+  /* Scoreboard sizes */
+  --ss-score-md: 3.5rem;  /* 56 — fixture score */
+  --ss-score-lg: 5.5rem;  /* 88 — live scoring score */
+
+  /* The uppercase section-label signature */
+  --ss-label-tracking: 0.18em;
+
+  /* Live accent (energetic green) + translucent fill, available everywhere */
+  --ss-accent:      oklch(80% 0.185 145);
+  --ss-tint-accent: color-mix(in oklch, var(--ss-accent) 16%, transparent);
+
+  /* Radii / motion echoes used by the utilities below */
+  --ss-radius-lg:   0.75rem;  /* 12 — cards */
+  --ss-radius-pill: 999px;
+  --ss-ease-out:    cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ====================================================================
+   DaisyUI `dark` theme override — retune the surface ramp, brand blue and
+   accent to the SchoolScore palette. DaisyUI v5 reads these `--color-*`
+   custom properties on the active [data-theme] element.
+   ==================================================================== */
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Deep cool-navy surface ramp (darkest → lightest) */
+  --color-base-100: oklch(21.5% 0.020 256);   /* default card / header surface */
+  --color-base-200: oklch(25.5% 0.022 256);   /* raised panels, list rows */
+  --color-base-300: oklch(32%   0.024 256);   /* borders, dividers, hover fills */
+  --color-base-content: oklch(96% 0.008 256); /* primary text/icon color */
+
+  /* Brand primary — the #1a56db blue, brightened for dark legibility */
+  --color-primary:          oklch(62% 0.184 257);
+  --color-primary-content:  oklch(98% 0.012 257);
+
+  /* Secondary kept close to primary; accent is the rationed live green */
+  --color-secondary:         oklch(57% 0.184 257);
+  --color-secondary-content: oklch(98% 0.012 257);
+  --color-accent:            oklch(80% 0.185 145);
+  --color-accent-content:    oklch(24% 0.060 150);
+
+  /* Neutral dark chips */
+  --color-neutral:         oklch(30% 0.020 256);
+  --color-neutral-content: oklch(92% 0.008 256);
+
+  /* Semantic roles */
+  --color-success:         oklch(73% 0.165 158);
+  --color-success-content: oklch(25% 0.060 160);
+  --color-warning:         oklch(80% 0.155 78);
+  --color-warning-content: oklch(28% 0.070 70);
+  --color-error:           oklch(64% 0.210 22);
+  --color-error-content:   oklch(98% 0.015 20);
+  --color-info:            oklch(72% 0.125 230);
+  --color-info-content:    oklch(24% 0.055 240);
+
+  /* Radii — cards at 12px (box), fields at 8px, pills for selectors/badges */
+  --radius-box:      0.75rem;
+  --radius-field:    0.5rem;
+  --radius-selector: 999px;
+}
+
+/* ====================================================================
+   Base element styles
+   ==================================================================== */
 *, *::before, *::after { box-sizing: border-box; }
+
+html { -webkit-text-size-adjust: 100%; }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family: var(--ss-font-sans);
   line-height: 1.5;
-  color: oklch(var(--bc) / 0.85);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--ss-font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
 }
 
 header {
   padding: 0.75rem 1.5rem;
-  border-bottom: 1px solid oklch(var(--b3));
-  background: oklch(var(--b1));
+  border-bottom: 1px solid var(--color-base-300);
+  background: var(--color-base-100);
 }
 
-header h1 { margin: 0; font-size: 1.25rem; }
+header h1 { margin: 0; font-size: 1.25rem; font-weight: 800; }
 
 main { padding: 2rem; max-width: 52rem; margin: 0 auto; }
 
@@ -22,20 +121,79 @@ main { padding: 2rem; max-width: 52rem; margin: 0 auto; }
   main { padding: 1rem; }
 }
 
+/* ====================================================================
+   Signature utility classes — the brand's recurring patterns.
+   ==================================================================== */
+
+/* The uppercase, widely-tracked, faint section label seen across the app */
+.ss-label {
+  font-family: var(--ss-font-sans);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: var(--ss-label-tracking);
+  text-transform: uppercase;
+  color: color-mix(in oklch, var(--color-base-content) 46%, transparent);
+}
+
+/* Bordered surface card (rounded-xl border on the raised panel surface) */
+.ss-card {
+  background: var(--color-base-200);
+  border: 1px solid color-mix(in oklch, var(--color-base-300) 70%, transparent);
+  border-radius: var(--ss-radius-lg);
+}
+
+/* Scoreboard numerals — display family, tabular figures */
+.ss-score {
+  font-family: var(--ss-font-display);
+  font-weight: 900;
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.ss-score-md { font-size: var(--ss-score-md); }
+.ss-score-lg { font-size: var(--ss-score-lg); }
+
+/* Mono data (codes, UIDs) */
+.ss-mono { font-family: var(--ss-font-mono); font-variant-numeric: tabular-nums; }
+
+/* Live pulse dot */
+.ss-live-dot {
+  display: inline-block;
+  width: 0.5rem; height: 0.5rem;
+  border-radius: var(--ss-radius-pill);
+  background: var(--ss-accent);
+  box-shadow: 0 0 0 0 color-mix(in oklch, var(--ss-accent) 70%, transparent);
+  animation: ss-pulse 1.8s var(--ss-ease-out) infinite;
+}
+@keyframes ss-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklch, var(--ss-accent) 60%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ss-live-dot { animation: none; }
+}
+
+/* ====================================================================
+   App-specific behaviour (preserved from the original app.css)
+   ==================================================================== */
+
 /* JS-controlled show/hide — class toggled by fixture row expand logic */
 .fixture-codes-row { display: none; }
 .fixture-codes-row.open { display: table-row; }
 
-/* Sync status badge — position driven by JS state */
+/* Sync status badge — position driven by JS state (a recurring scorekeeper
+   element; styled as a pill per the design system) */
 .sync-status {
   position: fixed;
   bottom: 1rem;
   right: 1rem;
   font-size: 0.75rem;
-  background: oklch(var(--b1));
-  border: 1px solid oklch(var(--b3));
-  border-radius: 999px;
+  background: var(--color-base-100);
+  border: 1px solid var(--color-base-300);
+  border-radius: var(--ss-radius-pill);
   padding: 0.25rem 0.75rem;
-  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
   z-index: 50;
 }
