@@ -20,32 +20,19 @@
   "Signed-in landing page."
   [user events memberships _active-tid & [{:keys [tenant-name]}]]
   (shared/doc "Sports Manager"
-              [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
-               [:div.flex.flex-col.gap-1
-                (when tenant-name
-                  [:span.text-xs.font-medium.uppercase.tracking-wider.opacity-50 tenant-name])
-                [:nav.flex.flex-wrap.gap-x-6.gap-y-2.text-sm
-                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/users"} "Manage users"]
-                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/school/sports"} "Sports"]
-                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/disputes"} "Disputes"]
-                 [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/audit"} "Audit log"]
-                 (when (> (count memberships) 1)
-                   [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/select-tenant"} "Switch org"])]]
-               [:div.flex.items-center.gap-4
-                [:span.text-sm.opacity-60
-                 (or (:user/name user) (:user/email user))]
-                [:form {:method "post" :action "/auth/logout"}
-                 (shared/csrf-field)
-                 [:button.btn.btn-sm.btn-ghost {:type "submit"} "Sign out"]]]]
+              {:user user :active :events :nav-count (count memberships)}
+              [:div.mb-8
+               (when tenant-name
+                 [:span.ss-label tenant-name])]
               [:section
                [:div.flex.items-center.justify-between.mb-4
-                [:h2.text-xl.font-semibold.m-0 "Events"]
+                [:h2.text-2xl.m-0 "Events"]
                 [:a.btn.btn-primary.btn-sm {:href "/events/create"} "+ New event"]]]
               (if (seq events)
                 [:ul.flex.flex-col.gap-3
                  (for [e events]
                    [:li
-                    [:a.block.rounded-xl.border.border-base-300.bg-base-200.hover:bg-base-300.transition-colors.p-4.no-underline
+                    [:a.ss-card.block.hover:bg-base-300.transition-colors.p-4.no-underline
                      {:href (str "/events/" (:event/id e))}
                      [:div.flex.items-center.gap-3
                       [:span.font-semibold.text-base.flex-1 (:event/name e)]
@@ -61,17 +48,9 @@
   [current-user tenant-users all-roles & [{:keys [add-errors add-email pending-invites invited?]
                                            :or {add-errors {} pending-invites []}}]]
   (shared/doc "Manage users — Sports Manager"
+              {:user current-user :active :users}
               [:div#toast]
-              [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
-               [:nav.flex.flex-wrap.gap-x-6.gap-y-2.text-sm
-                [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/"} "Home"]
-                [:strong "Users"]]
-               [:div.flex.items-center.gap-4
-                [:span.text-sm.opacity-60
-                 (or (:user/name current-user) (:user/email current-user))]
-                [:form {:method "post" :action "/auth/logout"}
-                 (shared/csrf-field)
-                 [:button.btn.btn-sm.btn-ghost {:type "submit"} "Sign out"]]]]
+              [:h2.text-2xl.mb-8 "Manage users"]
               (when invited?
                 [:div.alert.alert-success.mb-6
                  [:span "Invite sent. They'll be added automatically when they sign in."]])
@@ -82,7 +61,7 @@
                   (for [u (sort-by :user/email tenant-users)]
                     (let [uid (:user/firebase-uid u)
                           user-roles (into #{} (map :role/name) (:user/roles u))]
-                      [:div.rounded-xl.border.border-base-300.bg-base-200.p-4
+                      [:div.ss-card.p-4
                        [:div.flex.flex-wrap.items-start.justify-between.gap-3.mb-3
                         [:div
                          (when-let [n (:user/name u)]
@@ -107,7 +86,7 @@
                  [:h2.text-xl.font-semibold.mb-4 "Pending invites"]
                  [:div.flex.flex-col.gap-2
                   (for [inv (sort-by :invite/email pending-invites)]
-                    [:div.rounded-xl.border.border-base-300.bg-base-200.p-3.flex.items-center.justify-between
+                    [:div.ss-card.p-3.flex.items-center.justify-between
                      [:span.text-sm (:invite/email inv)]
                      [:span.badge.badge-outline.badge-sm "Awaiting sign-in"]])]])
               [:section
@@ -135,9 +114,8 @@
   (let [platform (filter #(not= false (:sport-template/is-template %)) all)
         custom (filter #(false? (:sport-template/is-template %)) all)]
     (shared/doc "Sports — Sports Manager"
-                [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
-                 [:p [:a {:href "/"} "← Home"]]
-                 [:h2 "Sports"]]
+                {:active :sports}
+                [:h2.text-2xl.mb-2 "Sports"]
                 [:section
                  [:p "Select the sports your school offers. These will be available when creating events."]
                  [:form {:method "post" :action "/school/sports"}

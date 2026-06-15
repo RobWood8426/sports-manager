@@ -21,10 +21,14 @@
       [:script {:src "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"}]
       [:link {:rel "stylesheet" :href "/css/app.css"}]]
      [:body
-      [:header [:h1 "Sports Manager"]]
+      [:header
+       [:a {:href "/" :class "flex items-center gap-3" :style "text-decoration:none;color:inherit"}
+        [:img {:src "/mark.svg" :alt "" :width "28" :height "28"}]
+        [:h1 "Sports Manager"]]]
       [:main
-       [:div.card.max-w-sm.mx-auto.mt-16.bg-base-100.shadow-xl.p-8
-        [:h2 "Sign in or sign up"]
+       [:div.ss-card.max-w-sm.mx-auto.mt-16.bg-base-100.shadow-xl.p-8
+        [:h2.mb-1 "Sign in"]
+        [:p.opacity-60.text-sm.mb-5 "Sign in or create an account to manage your school."]
         [:button.btn.btn-outline.w-full {:id "google" :type "button"}
          [:svg {:width "18" :height "18" :viewbox "0 0 18 18" :aria-hidden "true"}
           [:path {:fill "#4285F4" :d "M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.71-1.57 2.68-3.89 2.68-6.62z"}]
@@ -97,24 +101,24 @@
                [:form {:method "post" :action "/school/setup"}
                 (shared/csrf-field)
                 [:fieldset
-                 [:legend "School details"]
+                 [:legend.ss-label.mb-2 "School details"]
                  (shared/field errors :tenant/name "School name" {:required? true})
                  (shared/field errors :tenant/contact-email "Contact email" {:type "email" :required? true :value email})
                  (shared/field errors :tenant/contact-phone "Contact phone")
                  (shared/field errors :tenant/website "Website" {:type "url" :placeholder "https://"})]
                 [:fieldset
-                 [:legend "Location"]
+                 [:legend.ss-label.mb-2 "Location"]
                  (shared/field errors :tenant/address "Street address")
                  (shared/field errors :tenant/city "City")
                  (shared/field errors :tenant/province "Province / State")
                  (shared/field errors :tenant/country "Country")]
                 [:fieldset
-                 [:legend "Map location (optional)"]
+                 [:legend.ss-label.mb-2 "Map location (optional)"]
                  [:div.flex.flex-wrap.gap-3.items-end
                   (shared/field errors :tenant/latitude "Latitude" {:placeholder "-33.9249"})
                   (shared/field errors :tenant/longitude "Longitude" {:placeholder "18.4241"})]]
                 [:div.flex.gap-3.mt-4
-                 [:button.btn {:type "submit"} "Create school"]]]]))
+                 [:button.btn.btn-primary {:type "submit"} "Create school"]]]]))
 
 (defn select-tenant
   "Org picker page shown when a user belongs to multiple tenants."

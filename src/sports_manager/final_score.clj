@@ -52,7 +52,9 @@
                       :in [?fid]
                       :where [[?fix :fixture/id ?fid]
                               [?fix :fixture/event ?ev]
+                              [?fix :fixture/sport-template ?scode]
                               [?esc :event-sport/event ?ev]
+                              [?esc :event-sport/sport-template ?scode]
                               [?esc :event-sport/validation-model ?vm]]}
                     fixture-id))
       :validation.model/single))

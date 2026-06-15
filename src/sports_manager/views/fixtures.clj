@@ -17,13 +17,14 @@
                       :mismatch "Scores do not match"
                       :accepted "Accepted"
                       :disputed "Disputed"}
-        status-class {:match          "text-success font-semibold"
-                      :accepted        "text-success font-semibold"
-                      :mismatch        "text-error font-semibold"
-                      :disputed        "text-error font-semibold"
-                      :one-pending     "text-warning font-semibold"
-                      :no-submissions  "opacity-60"}]
+        status-class {:match "text-success font-semibold"
+                      :accepted "text-success font-semibold"
+                      :mismatch "text-error font-semibold"
+                      :disputed "text-error font-semibold"
+                      :one-pending "text-warning font-semibold"
+                      :no-submissions "opacity-60"}]
     (shared/doc (str "Score Comparison — " (get-in fixture [:fixture/sport-template :sport-template/name]))
+                {:active :events}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
                  [:p [:a {:href (str "/events/" event-id)} "← Back to event"]]
                  [:h2 "Score comparison"]]
@@ -43,17 +44,17 @@
                                                     :final-score.status/disputed} s-status))
                                         "bg-error/10")]
                         [:tr {:class row-class}
-                         [:td.font-mono.text-xs (str (get-in s [:final-score/scode :scode/id]))]
-                         [:td.font-bold (:final-score/team-a-score s)]
-                         [:td.font-bold (:final-score/team-b-score s)]
+                         [:td.ss-mono.text-xs (str (get-in s [:final-score/scode :scode/id]))]
+                         [:td [:span.ss-score.text-2xl.text-base-content (:final-score/team-a-score s)]]
+                         [:td [:span.ss-score.text-2xl.text-base-content (:final-score/team-b-score s)]]
                          [:td (when-let [at (:final-score/submitted-at s)] (.format fmt at))]
                          [:td (shared/final-score-status-badge s-status)]]))]]
-                  [:p.text-gray-500 "No submissions yet."])
+                  [:p.opacity-60 "No submissions yet."])
                 (when (= :disputed status)
                   [:section.mt-8.rounded-lg.border.border-error.p-4.space-y-3
                    {:style "background: color-mix(in srgb, oklch(var(--er)) 8%, transparent);"}
                    [:h3 "Resolve dispute"]
-                   [:p.text-gray-500 "Override the submitted scores with confirmed values and provide a reason for the record."]
+                   [:p.opacity-60 "Override the submitted scores with confirmed values and provide a reason for the record."]
                    (when-let [err (:form resolve-errors)]
                      [:p.text-error err])
                    [:form {:method "POST"
@@ -93,7 +94,7 @@
   "Admin page listing all disputed fixtures for the tenant."
   [disputed]
   (let [fmt (java.text.SimpleDateFormat. "d MMM yyyy HH:mm")]
-    (shared/doc "Disputed Scores — SchoolScore"
+    (shared/doc "Disputed Scores — SchoolScore" {:active :disputes}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
                  [:h2 "Disputed scores"]]
                 (if (seq disputed)
@@ -117,7 +118,7 @@
                          [:td (when-let [at (:final-score/submitted-at fs)] (.format fmt at))]
                          [:td [:a {:href (str "/events/" event-id "/fixtures/" fid "/comparison")}
                                "Review →"]]]))]]
-                  [:p.text-gray-500 "No disputed scores."]))))
+                  [:p.opacity-60 "No disputed scores."]))))
 
 (defn audit-log-page
   "Admin audit log page. `entries` is the seq from audit/list-by-tenant."
@@ -144,7 +145,7 @@
                        :user/grant-role "Role granted"
                        :user/revoke-role "Role revoked"}
         all-actions (sort (keys action-labels))]
-    (shared/doc "Audit Log — SchoolScore"
+    (shared/doc "Audit Log — SchoolScore" {:active :audit}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
                  [:h2 "Audit log"]]
                 [:form.mb-6 {:method "get" :action "/audit"}
@@ -181,8 +182,8 @@
                          [:span.badge.badge-ghost.badge-sm
                           (get action-labels (:audit/action e)
                                (str (:audit/action e)))]]
-                        [:td.font-mono.text-xs (or (:audit/actor e) "—")]
-                        [:td.font-mono.text-xs
+                        [:td.ss-mono.text-xs (or (:audit/actor e) "—")]
+                        [:td.ss-mono.text-xs
                          (str (when-let [t (:audit/entity-type e)] (name t))
                               " "
                               (when-let [i (:audit/entity-id e)] (str i)))]
@@ -195,18 +196,19 @@
                               [:pre.text-xs.whitespace-pre-wrap (str "− " b)])
                             (when-let [a (:audit/after e)]
                               [:pre.text-xs.whitespace-pre-wrap (str "+ " a)])])]])]]]
-                  [:p.text-gray-500 "No audit entries found."]))))
+                  [:p.opacity-60 "No audit entries found."]))))
 
 (defn fixture-import-upload
   "Step 1 — file upload form."
   [event & [{:keys [error]}]]
   (let [event-id (:event/id event)]
     (shared/doc (str "Import Fixtures — " (:event/name event))
+                {:active :events}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
                  [:p [:a {:href (str "/events/" event-id)} "← Back to event"]]
                  [:h2 "Import fixtures from CSV"]]
                 (when error [:p.text-error error])
-                [:p.text-gray-500 "Upload a CSV file with a header row. You'll map columns to fields on the next step."]
+                [:p.opacity-60 "Upload a CSV file with a header row. You'll map columns to fields on the next step."]
                 [:form {:method "POST"
                         :action (str "/events/" event-id "/import/upload")
                         :enctype "multipart/form-data"}
@@ -223,11 +225,12 @@
   [event headers fields & [{:keys [error]}]]
   (let [event-id (:event/id event)]
     (shared/doc (str "Map Columns — " (:event/name event))
+                {:active :events}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
                  [:p [:a {:href (str "/events/" event-id "/import")} "← Re-upload"]]
                  [:h2 "Map CSV columns to fixture fields"]]
                 (when error [:p.text-error error])
-                [:p.text-gray-500 "Select which CSV column maps to each fixture field. Required fields must be mapped."]
+                [:p.opacity-60 "Select which CSV column maps to each fixture field. Required fields must be mapped."]
                 [:form {:method "POST" :action (str "/events/" event-id "/import/map")}
                  (shared/csrf-field)
                  [:table.table.table-zebra.w-full
@@ -253,6 +256,7 @@
   (let [event-id (:event/id event)
         fmt (java.text.SimpleDateFormat. "d MMM HH:mm")]
     (shared/doc (str "Import Preview — " (:event/name event))
+                {:active :events}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-3.mb-6
                  [:p [:a {:href (str "/events/" event-id "/import")} "← Start over"]]
                  [:h2 "Import preview"]]
@@ -283,8 +287,8 @@
                           [:td (or (:fixture/venue p) "—")]]))]]
                    [:form {:method "POST" :action (str "/events/" event-id "/import/confirm")}
                     (shared/csrf-field)
-                    [:p.text-gray-500 "Fixtures will be created in draft state. You can review and publish them from the event page."]
+                    [:p.opacity-60 "Fixtures will be created in draft state. You can review and publish them from the event page."]
                     [:button.btn {:type "submit"} (str "Import " (count valid) " fixture(s)")]]]
                   [:div
-                   [:p.text-gray-500 "No valid fixtures to import."]
+                   [:p.opacity-60 "No valid fixtures to import."]
                    [:p [:a {:href (str "/events/" event-id "/import")} "← Try again"]]]))))

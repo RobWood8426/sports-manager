@@ -3,53 +3,132 @@
   (:require [hiccup2.core :as h]
             [ring.middleware.anti-forgery :refer [*anti-forgery-token*]]))
 
-(defn doc
-  "Wrap body hiccup in a full HTML document with DaisyUI + HTMX loaded."
-  [title & body]
-  (str
-   "<!DOCTYPE html>"
-   (h/html
-    [:html {:lang "en" :data-theme "dark"}
-     [:head
-      [:meta {:charset "utf-8"}]
-      [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
-      [:title title]
-      [:link {:href "https://cdn.jsdelivr.net/npm/daisyui@5" :rel "stylesheet" :type "text/css"}]
-      [:script {:src "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"}]
-      [:script {:src "https://unpkg.com/htmx.org@2.0.3"}]
-      [:link {:rel "stylesheet" :href "/css/app.css"}]]
-     [:body
-      [:header
-       [:a {:href "/" :class "flex items-center gap-3"
-            :style "text-decoration:none;color:inherit"}
-        [:img {:src "/mark.svg" :alt "" :width "28" :height "28"}]
-        [:h1 "Sports Manager"]]]
-      (into [:main] body)
-      [:script {:src "/js/form-spinner.js"}]]])))
-
-(defn doc-public
-  "Full HTML document for public (unauthenticated) pages — no admin header."
-  [title & body]
-  (str
-   "<!DOCTYPE html>"
-   (h/html
-    [:html {:lang "en" :data-theme "dark"}
-     [:head
-      [:meta {:charset "utf-8"}]
-      [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
-      [:title title]
-      [:link {:href "https://cdn.jsdelivr.net/npm/daisyui@5" :rel "stylesheet" :type "text/css"}]
-      [:script {:src "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"}]
-      [:link {:rel "stylesheet" :href "/css/app.css"}]
-      [:link {:rel "manifest" :href "/manifest.json"}]
-      [:meta {:name "theme-color" :content "#1a56db"}]]
-     [:body
-      (into [:main.p-6.max-w-xl.mx-auto] body)]])))
-
 (defn csrf-field
   "Hidden input carrying the CSRF token. Include once inside every POST form."
   []
   [:input {:type "hidden" :name "__anti-forgery-token" :value *anti-forgery-token*}])
+
+(def ^:private nav-items
+  "Persistent admin global-nav: [active-key label href]."
+  [[:events "Events" "/"]
+   [:users "Manage users" "/users"]
+   [:sports "Sports" "/school/sports"]
+   [:disputes "Disputes" "/disputes"]
+   [:audit "Audit log" "/audit"]])
+
+(defn- brand
+  "SchoolScore logo lockup (design-system `Logo`): the scoreboard mark + the
+  wordmark — \"School\" at full strength, \"Score\" in brand blue, Archivo
+  extrabold. Links home. `size` is the mark edge in px."
+  ([] (brand 28))
+  ([size]
+   [:a.flex.items-center.shrink-0
+    {:href "/" :style (str "text-decoration:none;gap:" (Math/round (* size 0.42)) "px")}
+    [:svg {:width size :height size :viewBox "0 0 64 64" :fill "none"
+           :aria-hidden "true" :style "display:block;flex:none"}
+     [:rect {:x "2" :y "2" :width "60" :height "60" :rx "16" :fill "#2e6bf0"}]
+     [:rect {:x "15" :y "20" :width "13" :height "24" :rx "4" :fill "#ffffff" :fill-opacity "0.92"}]
+     [:rect {:x "36" :y "20" :width "13" :height "24" :rx "4" :fill "#ffffff" :fill-opacity "0.5"}]
+     [:circle {:cx "49" :cy "15" :r "6.5" :fill "#3ddc84" :stroke "#2e6bf0" :stroke-width "2.5"}]]
+    [:span {:style (str "font-family:var(--ss-font-display);font-weight:800;"
+                        "font-size:" (Math/round (* size 0.82)) "px;"
+                        "letter-spacing:-0.02em;line-height:1;color:var(--text-strong)")}
+     "School" [:span {:style "color:var(--color-primary)"} "Score"]]]))
+
+(defn- admin-header
+  "The standardized sticky admin header from the design system `Shell`: brand +
+  global nav (active item at full strength, others muted) on the left, signed-in
+  user + Sign out on the right. `active` is a nav key (see `nav-items`); when nil
+  the nav is omitted (used by pages like org-selection that have no tenant
+  context yet)."
+  [{:keys [user active nav-count]}]
+  [:header.sticky.top-0.z-10.flex.flex-wrap.items-center.justify-between.gap-y-2
+   {:style "padding:0.75rem 1.75rem;border-bottom:1px solid var(--color-base-300);background:var(--color-base-100)"}
+   [:div.flex.items-center.gap-7.flex-wrap
+    (brand 24)
+    (when active
+      [:nav.flex.flex-wrap.gap-x-5.gap-y-1.text-sm
+       (for [[k label href] nav-items]
+         [:a.transition-colors
+          {:href href
+           :style (if (= k active)
+                    "color:var(--text-strong);font-weight:600"
+                    "color:var(--text-muted);font-weight:400")}
+          label])
+       (when (and nav-count (> nav-count 1))
+         [:a.transition-colors {:href "/select-tenant" :style "color:var(--text-muted)"} "Switch org"])])]
+   (when user
+     [:div.flex.items-center.gap-4
+      [:span.text-sm {:style "color:var(--text-subtle)"} (or (:user/name user) (:user/email user))]
+      [:form {:method "post" :action "/auth/logout"}
+       (csrf-field)
+       [:button.btn.btn-sm.btn-ghost {:type "submit"} "Sign out"]]])])
+
+(defn doc
+  "Wrap body hiccup in a full HTML document with DaisyUI + HTMX loaded.
+
+  An optional leading options map customises the standardized admin header:
+    :user      signed-in user entity (shows email + Sign out)
+    :active    active global-nav key (see `nav-items`); omit to hide the nav
+    :nav-count membership count (>1 shows the Switch org link)
+  When no options map is supplied, a plain brand-only header is rendered (e.g.
+  the error page)."
+  [title & args]
+  (let [opts (when (map? (first args)) (first args))
+        body (if opts (rest args) args)]
+    (str
+     "<!DOCTYPE html>"
+     (h/html
+      [:html {:lang "en" :data-theme "dark"}
+       [:head
+        [:meta {:charset "utf-8"}]
+        [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
+        [:title title]
+        [:link {:href "https://cdn.jsdelivr.net/npm/daisyui@5" :rel "stylesheet" :type "text/css"}]
+        [:script {:src "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"}]
+        [:script {:src "https://unpkg.com/htmx.org@2.0.3"}]
+        [:link {:rel "stylesheet" :href "/css/app.css"}]]
+       [:body
+        (admin-header opts)
+        (into [:main] body)
+        [:script {:src "/js/form-spinner.js"}]]]))))
+
+(defn doc-public
+  "Full HTML document for public (unauthenticated) pages.
+
+  An optional leading options map adds the design-system spectator `Shell`
+  header (brand mark + wordmark on the left, an optional event-code chip on the
+  right):
+    :brand? true   render the public brand header
+    :code  \"IHSD26\"  show a `code · IHSD26` chip on the right (implies :brand?)
+  With no options map the page is chrome-free (the bare code-entry screens)."
+  [title & args]
+  (let [opts (when (map? (first args)) (first args))
+        body (if opts (rest args) args)
+        {:keys [code]} opts
+        show-header? (boolean (or code (:brand? opts)))]
+    (str
+     "<!DOCTYPE html>"
+     (h/html
+      [:html {:lang "en" :data-theme "dark"}
+       [:head
+        [:meta {:charset "utf-8"}]
+        [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
+        [:title title]
+        [:link {:href "https://cdn.jsdelivr.net/npm/daisyui@5" :rel "stylesheet" :type "text/css"}]
+        [:script {:src "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"}]
+        [:link {:rel "stylesheet" :href "/css/app.css"}]
+        [:link {:rel "manifest" :href "/manifest.json"}]
+        [:meta {:name "theme-color" :content "#1a56db"}]]
+       [:body
+        (when show-header?
+          [:header.flex.items-center.justify-between
+           {:style "padding:0.875rem 1.25rem;border-bottom:1px solid var(--color-base-300);background:var(--color-base-100)"}
+           (brand 22)
+           (when code
+             [:span.ss-mono {:style "font-size:var(--text-xs, 0.75rem);color:var(--text-subtle)"}
+              (str "code · " code)])])
+        (into [:main.p-6.max-w-xl.mx-auto] body)]]))))
 
 (defn field
   "A labelled form input. Shows an inline error when `errors` contains the field key."
@@ -168,12 +247,44 @@
       (and start (.before start now)) ["Live" "text-success font-semibold"]
       :else ["Upcoming" "opacity-50"])))
 
+(defn fixture-status-pill
+  "Tint status pill for a public-facing fixture, matching the design system's
+  StatusBadge: a translucent tinted fill + matching text + subtle border, pill
+  radius. Live also gets the pulsing dot. `label` is one of the strings from
+  `fixture-status-label` (Live / Final / Pending / Disputed / Ended / Upcoming).
+  An optional `attrs` map is merged onto the pill span (e.g. an `:id` the
+  spectator detail page's poller targets)."
+  ([label] (fixture-status-pill label nil))
+  ([label attrs]
+   (let [;; [text+border colour token, tint background] per status tone
+         [tone tint] (case label
+                       "Live" ["var(--ss-accent)" "var(--ss-tint-accent)"]
+                       "Final" ["var(--color-success)" "color-mix(in oklch, var(--color-success) 15%, transparent)"]
+                       "Pending" ["var(--color-warning)" "color-mix(in oklch, var(--color-warning) 16%, transparent)"]
+                       "Disputed" ["var(--color-error)" "color-mix(in oklch, var(--color-error) 16%, transparent)"]
+                       ;; Ended / Upcoming — quiet, no fill
+                       [nil nil])]
+     (if tone
+       [:span.inline-flex.items-center.gap-1.5.shrink-0
+        (merge {:style (str "height:22px;padding:0 9px;border-radius:var(--ss-radius-pill);"
+                            "font-size:0.6875rem;font-weight:600;line-height:1;white-space:nowrap;"
+                            "color:" tone ";background:" tint ";"
+                            "border:1px solid color-mix(in oklch, " tone " 28%, transparent)")}
+               attrs)
+        (when (= label "Live") [:span.ss-live-dot {:style "width:6px;height:6px"}])
+        label]
+       ;; quiet ghost pill for Ended / Upcoming
+       [:span.inline-flex.items-center.shrink-0.opacity-50
+        (merge {:style "height:22px;padding:0 9px;font-size:0.6875rem;font-weight:600;line-height:1;white-space:nowrap"}
+               attrs)
+        label]))))
+
 (defn error-page
   "Generic error page. `status` is the HTTP status code, `message` is human-readable."
   [status message]
   (doc (str status " — Sports Manager")
        [:div.max-w-xl.mx-auto.mt-12.text-center
         [:h2.text-4xl.font-bold.mb-4 (str status)]
-        [:p.text-gray-600 message]
+        [:p.opacity-60 message]
         [:div.mt-6
          [:a.btn {:href "/"} "Go home"]]]))

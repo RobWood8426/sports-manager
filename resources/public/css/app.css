@@ -56,6 +56,14 @@
   --color-base-300: oklch(32%   0.024 256);   /* borders, dividers, hover fills */
   --color-base-content: oklch(96% 0.008 256); /* primary text/icon color */
 
+  /* Text hierarchy — the design system's single-hue-at-opacity model. Prefer
+     these aliases over ad-hoc opacity-* utilities for text colour. */
+  --text-strong: oklch(99% 0.006 256);
+  --text-body:   var(--color-base-content);
+  --text-muted:  color-mix(in oklch, var(--color-base-content) 64%, transparent);
+  --text-subtle: color-mix(in oklch, var(--color-base-content) 46%, transparent);
+  --text-faint:  color-mix(in oklch, var(--color-base-content) 32%, transparent);
+
   /* Brand primary — the #1a56db blue, brightened for dark legibility */
   --color-primary:          oklch(62% 0.184 257);
   --color-primary-content:  oklch(98% 0.012 257);
@@ -107,13 +115,13 @@ h1, h2, h3, h4 {
   line-height: 1.15;
 }
 
+/* Admin header: brand + global nav. The sticky/flex layout is applied inline
+   in shared/admin-header; these are the surface defaults. */
 header {
-  padding: 0.75rem 1.5rem;
+  padding: 0.75rem 1.75rem;
   border-bottom: 1px solid var(--color-base-300);
   background: var(--color-base-100);
 }
-
-header h1 { margin: 0; font-size: 1.25rem; font-weight: 800; }
 
 main { padding: 2rem; max-width: 52rem; margin: 0 auto; }
 

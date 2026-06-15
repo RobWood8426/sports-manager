@@ -37,7 +37,7 @@
      (when show-new?
        [:div.alert.alert-info.text-sm.p-3
         [:strong "New code generated (shown once): "]
-        [:a.font-mono.font-bold.link.link-primary {:href (str "/score?code=" new-code) :target "_blank"} new-code]
+        [:a.ss-mono.font-bold.link.link-primary {:href (str "/score?code=" new-code) :target "_blank"} new-code]
         [:span.ml-2.opacity-70 "↗ opens scorer tab"]])
      (when (seq codes)
        [:ul.flex.flex-col.gap-1
@@ -87,11 +87,11 @@
                          selected-codes)
         cur-vis (some-> (:event/visibility values) name)
         cur-access (some-> (:event/access-method values) name)]
-    (shared/doc "New Event — Sports Manager"
-                [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
-                 [:nav.flex.flex-wrap.gap-x-6.gap-y-2.text-sm
-                  [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
-                  [:strong "Create event"]]]
+    (shared/doc "New Event — Sports Manager" {:active :events}
+                [:nav.flex.flex-wrap.gap-2.text-sm.mb-6.pb-4.border-b.border-base-300.items-center
+                 [:a.opacity-60.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
+                 [:span.opacity-30 "/"]
+                 [:strong "Create event"]]
                 [:form {:method "post" :action "/events"}
                  (shared/csrf-field)
                  [:div.flex.flex-col.gap-6
@@ -171,9 +171,11 @@
                    :validation.model/admin-approval "Always requires admin approval"}
         vm-options (seq vm-labels)]
     (shared/doc (str (:event/name event) " — Sports Manager")
+                {:active :events}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
-                 [:nav.flex.flex-wrap.gap-x-6.gap-y-2.text-sm
-                  [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
+                 [:nav.flex.flex-wrap.gap-2.text-sm.items-center
+                  [:a.opacity-60.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
+                  [:span.opacity-30 "/"]
                   [:strong (:event/name event)]]
                  [:div.flex.items-center.gap-2.flex-wrap
                   (shared/event-status-badge (:event/status event))
@@ -193,15 +195,15 @@
                  (when event-code
                    [:p.text-sm.opacity-60
                     "Code: "
-                    [:a.font-mono.link.link-primary {:href (str "/e/" event-code) :target "_blank"} event-code]
+                    [:a.ss-mono.link.link-primary {:href (str "/e/" event-code) :target "_blank"} event-code]
                     " "
                     [:a.link.link-primary {:href (str "/events/" event-id "/qr") :target "_blank"} "QR Code"]])]
                 [:section.mb-8
-                 [:h2.text-xs.font-semibold.uppercase.tracking-widest.opacity-50.mb-3 "Participating schools"]
+                 [:h2.ss-label.block.mb-3 "Participating schools"]
                  (if (seq participants)
                    [:div.flex.flex-col.gap-2.mb-4
                     (for [p participants]
-                      [:div.flex.items-center.gap-3.rounded-xl.border.border-base-300.bg-base-200.px-4.py-3
+                      [:div.flex.items-center.gap-3.ss-card.px-4.py-3
                        [:div.flex-1
                         [:span.font-semibold (:participant/name p)]
                         (when-let [t (get-in p [:participant/tenant :tenant/name])]
@@ -213,7 +215,7 @@
                         (shared/csrf-field)
                         [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])]
                    [:p.opacity-50.mb-4 "No schools added yet."])
-                 [:details.rounded-xl.border.border-base-300.bg-base-200
+                 [:details.ss-card
                   [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add participating school"]
                   [:div.px-4.pb-4.pt-2
                    [:form {:method "post" :action (str "/events/" event-id "/participants")}
@@ -242,13 +244,13 @@
                      [:button.btn.btn-sm {:type "submit"} "Add school"]]]]]]
                 (when (seq sport-configs)
                   [:section.mb-8
-                   [:h2.text-xs.font-semibold.uppercase.tracking-widest.opacity-50.mb-3 "Sport settings"]
+                   [:h2.ss-label.block.mb-3 "Sport settings"]
                    [:div.flex.flex-col.gap-2
                     (for [cfg sport-configs]
                       (let [sport-name (:sport-template/name cfg)
                             current-vm (or (:effective/validation-model cfg) :validation.model/single)
                             sport-slug (name (:sport-template/code cfg))]
-                        [:div.rounded-xl.border.border-base-300.bg-base-200.px-4.py-3
+                        [:div.ss-card.px-4.py-3
                          [:form {:method "post"
                                  :action (str "/events/" event-id "/sports/" sport-slug "/config")}
                           (shared/csrf-field)
@@ -262,7 +264,7 @@
                                label])]
                            [:button.btn.btn-sm.btn-primary {:type "submit"} "Save"]]]]))]])
                 [:section.mb-8
-                 [:h2.text-xs.font-semibold.uppercase.tracking-widest.opacity-50.mb-3 "Venues"]
+                 [:h2.ss-label.block.mb-3 "Venues"]
                  (if (seq venues)
                    [:div.flex.flex-col.gap-2.mb-4
                     (for [v venues]
@@ -275,7 +277,7 @@
                                              "venue.type/hall" "Hall"
                                              "venue.type/other" "Other"}
                                             (some-> v :venue/type name) "—")]
-                        [:div.flex.items-center.gap-3.rounded-xl.border.border-base-300.bg-base-200.px-4.py-3
+                        [:div.flex.items-center.gap-3.ss-card.px-4.py-3
                          [:span.font-semibold.flex-1 (:venue/name v)]
                          [:span.text-sm.opacity-50 type-label]
                          (when-let [o (:venue/display-order v)]
@@ -285,7 +287,7 @@
                           (shared/csrf-field)
                           [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]]))]
                    [:p.opacity-50.mb-4 "No venues added yet."])
-                 [:details.rounded-xl.border.border-base-300.bg-base-200
+                 [:details.ss-card
                   [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add venue"]
                   [:div.px-4.pb-4.pt-2
                    [:form {:method "post" :action (str "/events/" event-id "/venues")}
@@ -314,11 +316,11 @@
                      [:button.btn.btn-sm {:type "submit"} "Add venue"]]]]]]
                 (when (seq participants)
                   [:section.mb-8
-                   [:h2.text-xs.font-semibold.uppercase.tracking-widest.opacity-50.mb-3 "Teams"]
+                   [:h2.ss-label.block.mb-3 "Teams"]
                    (if (seq teams)
                      [:div.flex.flex-col.gap-2.mb-4
                       (for [t teams]
-                        [:div.flex.items-center.gap-3.rounded-xl.border.border-base-300.bg-base-200.px-4.py-3
+                        [:div.flex.items-center.gap-3.ss-card.px-4.py-3
                          [:span.font-semibold.flex-1 (:team/name t)]
                          [:span.text-sm.opacity-50 (get-in t [:team/participant :participant/name])]
                          [:span.text-sm.opacity-50 (get-in t [:team/sport :sport-template/name])]
@@ -334,7 +336,7 @@
                           (shared/csrf-field)
                           [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])]
                      [:p.opacity-50.mb-4 "No teams added yet."])
-                   [:details.rounded-xl.border.border-base-300.bg-base-200
+                   [:details.ss-card
                     [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add team"]
                     [:div.px-4.pb-4.pt-2
                      [:form {:method "post" :action (str "/events/" event-id "/teams")}
@@ -372,10 +374,10 @@
                        [:button.btn.btn-sm {:type "submit"} "Add team"]]]]]])
                 [:section {:id "fixtures-section"}
                  [:div.flex.items-center.justify-between.gap-3.mb-3.flex-wrap
-                  [:h2.text-xs.font-semibold.uppercase.tracking-widest.opacity-50.m-0 "Fixtures"]
+                  [:h2.ss-label.m-0 "Fixtures"]
                   (when (seq participants)
                     [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/import")} "Import CSV"])]
-                 [:details.rounded-xl.border.border-base-300.bg-base-200.mb-4
+                 [:details.ss-card.mb-4
                   [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm
                    "Filters" (when filter-active? " (active)")]
                   [:div.px-4.pb-4.pt-2
@@ -430,7 +432,7 @@
                    [:p.opacity-50.mb-4
                     (if filter-active? "No fixtures match the current filters." "No fixtures yet.")])
                  (when (seq participants)
-                   [:details.rounded-xl.border.border-base-300.bg-base-200
+                   [:details.ss-card
                     [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add fixture"]
                     [:div.px-4.pb-4.pt-2
                      [:form {:method "post" :action (str "/events/" event-id "/fixtures")}
@@ -520,29 +522,34 @@
                       [:td.opacity-60 (or (:fixture/age-group f) "—")]
                       [:td.opacity-60 (or (:fixture/venue f) "—")]
                       [:td.opacity-60 (when-let [s (:fixture/start-at f)] (.format fmt s))]
-                      [:td.font-mono (if score (str (:a score) " – " (:b score)) "—")]
+                      [:td (if score
+                             [:span.ss-score.text-base-content (str (:a score) " – " (:b score))]
+                             "—")]
                       [:td.opacity-60 (:dashboard/active-codes f)]
                       [:td (when (:dashboard/conflict? f)
                              [:span.badge.badge-sm.badge-warning "conflict"])]]))]
     (shared/doc (str (:event/name event) " — Dashboard")
+                {:active :events}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
-                 [:nav.flex.flex-wrap.gap-x-6.gap-y-2.text-sm
-                  [:a.opacity-70.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
-                  [:a.opacity-70.hover:opacity-100.transition-opacity {:href (str "/events/" event-id)} (:event/name event)]
+                 [:nav.flex.flex-wrap.gap-2.text-sm.items-center
+                  [:a.opacity-60.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
+                  [:span.opacity-30 "/"]
+                  [:a.opacity-60.hover:opacity-100.transition-opacity {:href (str "/events/" event-id)} (:event/name event)]
+                  [:span.opacity-30 "/"]
                   [:strong "Dashboard"]]
                  (shared/event-status-badge (:event/status event))]
                 [:div.grid.gap-3.mb-8
                  {:class "grid-cols-[repeat(auto-fill,minmax(130px,1fr))]"}
                  (for [[bucket label _ num-cl bdr-cl] buckets]
-                   [:div.rounded-xl.border.bg-base-200.p-4.text-center
+                   [:div.ss-card.p-4.text-center
                     {:class bdr-cl}
-                    [:div.text-3xl.font-bold
+                    [:div.ss-score.text-3xl
                      {:class num-cl}
                      (get counts bucket 0)]
-                    [:div.text-xs.uppercase.tracking-widest.opacity-50.mt-1 label]])
-                 [:div.rounded-xl.border.border-base-300.bg-base-200.p-4.text-center
-                  [:div.text-3xl.font-bold (:total counts 0)]
-                  [:div.text-xs.uppercase.tracking-widest.opacity-50.mt-1 "Total"]]]
+                    [:div.ss-label.block.mt-1 label]])
+                 [:div.ss-card.p-4.text-center
+                  [:div.ss-score.text-3xl.text-base-content (:total counts 0)]
+                  [:div.ss-label.block.mt-1 "Total"]]]
                 (when (seq conflicts)
                   [:div.alert.alert-warning.mb-6
                    [:span (str (count conflicts) " fixture(s) have multiple scorers active — possible conflict.")]])

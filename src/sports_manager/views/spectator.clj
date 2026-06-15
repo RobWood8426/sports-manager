@@ -6,22 +6,25 @@
 (defn spectator-code-entry
   "Public landing page for entering an event access code."
   [& [{:keys [error]}]]
-  (shared/doc-public "Enter event code — Sports Manager"
+  (shared/doc-public "Enter event code — SchoolScore"
                      [:div.max-w-xs.mx-auto.mt-12
-                      [:h1.text-2xl.font-bold.mb-2 "Find your event"]
-                      [:p.text-gray-500.mb-6.text-sm
+                      [:div.flex.justify-center.mb-3
+                       [:img {:src "/mark.svg" :alt "SchoolScore" :width "32" :height "32"}]]
+                      [:h1.mb-2 "Find your event"]
+                      [:p.opacity-60.mb-6.text-sm
                        "Enter the event code from your invitation or scan the QR code."]
                       [:form {:method "get" :action "/e"}
                        [:div.form-control
                         [:label.label [:span.label-text "Event code"]]
-                        [:input.input.input-bordered.w-full
+                        [:input.input.input-bordered.input-lg.w-full.ss-mono.text-center
                          {:id "code" :name "code" :type "text"
                           :placeholder "e.g. ABC123"
                           :autocomplete "off"
-                          :class "uppercase tracking-widest text-lg"}]
+                          :class "uppercase"
+                          :style "letter-spacing:0.22em;font-weight:700"}]
                         (when error [:label.label [:span.label-text-alt.text-error error]])]
-                       [:div.flex.gap-3.mt-4
-                        [:button.btn {:type "submit"} "Go to event"]]]]))
+                       [:div.mt-4
+                        [:button.btn.btn-primary.btn-lg.w-full {:type "submit"} "Go to event"]]]]))
 
 (defn spectator-event
   "Public mobile-first event landing page."
@@ -30,19 +33,25 @@
   (let [fmt (java.text.SimpleDateFormat. "d MMM HH:mm")
         date-fmt (java.text.SimpleDateFormat. "d MMM yyyy")
         sport-filter (get filters :sport-code "")
-        team-filter (get filters :team-name "")]
-    (shared/doc-public (str (:event/name event) " — Sports Manager")
+        team-filter (get filters :team-name "")
+        live-count (count (filter #(= "Live" (first (shared/fixture-status-label %))) fixtures))]
+    (shared/doc-public (str (:event/name event) " — SchoolScore")
+                       {:code (:event/code event)}
                        [:div.mb-6
-                        [:h1.text-2xl.font-bold.mb-1 (:event/name event)]
+                        [:h1.mb-1 (:event/name event)]
                         (when (:event/description event)
-                          [:p.text-gray-500.m-0 (:event/description event)])]
-                       (when (or (:event/start-at event) (:event/end-at event))
-                         [:p.text-sm.text-gray-500.mb-4
-                          (when-let [s (:event/start-at event)] (.format date-fmt s))
-                          (when (and (:event/start-at event) (:event/end-at event)) " – ")
-                          (when-let [e (:event/end-at event)] (.format date-fmt e))])
+                          [:p.opacity-60.m-0 (:event/description event)])
+                        (when (or (:event/start-at event) (:event/end-at event))
+                          [:p.text-sm.opacity-60.mt-1.mb-0
+                           (when-let [s (:event/start-at event)] (.format date-fmt s))
+                           (when (and (:event/start-at event) (:event/end-at event)) " – ")
+                           (when-let [e (:event/end-at event)] (.format date-fmt e))])]
                        [:section.mb-6
-                        [:h2.text-base.font-semibold.mb-3 "Fixtures"]
+                        [:div.flex.items-center.justify-between.mb-3
+                         [:span.ss-label "Fixtures"]
+                         (when (pos? live-count)
+                           [:span.badge.badge-sm.badge-accent.gap-1
+                            [:span.ss-live-dot] (str live-count " live")])]
                         [:form {:method "GET" :class "flex gap-2 flex-wrap mb-4"}
                          (when (seq sports)
                            [:select.select.select-bordered.select-sm
@@ -63,41 +72,38 @@
                                    a-name (get-in f [:fixture/team-a :participant/name] "TBA")
                                    b-name (get-in f [:fixture/team-b :participant/name] "TBA")
                                    sport (get-in f [:fixture/sport-template :sport-template/name])
-                                   [lbl cls] (shared/fixture-status-label f)
+                                   [lbl] (shared/fixture-status-label f)
+
                                    href (str "/e/fixture/" (:fixture/id f))]
                                [:a.no-underline.text-inherit.block {:href href}
-                                [:div.bg-base-100.border.border-base-300.rounded-lg.p-3
+                                [:div.ss-card.p-3.transition-colors {:class "hover:bg-base-300"}
                                  [:div.flex.justify-between.items-center.mb-1
-                                  [:span.text-xs.text-gray-500 sport]
-                                  [:span.text-xs {:class cls} lbl]]
+                                  [:span.text-xs.opacity-60 sport]
+                                  (shared/fixture-status-pill lbl)]
                                  [:div.flex.items-center.gap-3.text-base
                                   [:span.flex-1 a-name]
-                                  [:span.text-xl.font-bold.min-w-12.text-center
+                                  [:span.ss-score.text-2xl.min-w-12.text-center.text-base-content
                                    (if score
                                      (str (:a score) " – " (:b score))
                                      "– vs –")]
                                   [:span.flex-1.text-right b-name]]
                                  (when-let [start (:fixture/start-at f)]
-                                   [:div.text-xs.text-gray-500.mt-1
+                                   [:div.text-xs.opacity-50.mt-1
                                     (.format fmt start)
                                     (when-let [v (:fixture/venue f)]
                                       (str " · " v))])]]))]
-                          [:p.text-gray-500.text-sm
+                          [:p.opacity-60.text-sm
                            (if (or (not (str/blank? sport-filter)) (not (str/blank? team-filter)))
                              "No fixtures match the current filters."
                              "No fixtures published yet.")])]
                        [:section
-                        [:h2.text-base.font-semibold.mb-3 "Participating schools"]
+                        [:span.ss-label.block.mb-3 "Participating schools"]
                         (if (seq participants)
-                          [:ul.flex.flex-col.gap-2.list-none.p-0.m-0
+                          [:div.flex.flex-wrap.gap-2
                            (for [p participants]
-                             [:li.bg-base-100.border.border-base-300.rounded-lg.p-3
-                              [:strong (:participant/name p)]
-                              (when (:participant/contact-email p)
-                                [:span.block.text-sm.text-gray-500
-                                 (:participant/contact-email p)])])]
-                          [:p.text-gray-500.text-sm "No schools listed yet."])]
-                       [:p.mt-8.text-xs.text-gray-400.text-center "Powered by Sports Manager"])))
+                             [:span.badge.badge-outline.badge-lg (:participant/name p)])]
+                          [:p.opacity-60.text-sm "No schools listed yet."])]
+                       [:p.mt-8.text-xs.opacity-40.text-center "Powered by SchoolScore"])))
 
 (defn spectator-fixture
   "Public live score detail page for a single fixture."
@@ -110,27 +116,29 @@
         b-name (get-in fixture [:fixture/team-b :participant/name] "Team B")
         sport (get-in fixture [:fixture/sport-template :sport-template/name])
         start (:fixture/start-at fixture)
-        [status-label status-cls] (shared/fixture-status-label fixture)
+        [status-label] (shared/fixture-status-label fixture)
         should-poll? (nil? final-status)]
     (shared/doc-public (str a-name " vs " b-name " — SchoolScore")
+                       {:brand? true}
                        [:div.max-w-lg.mx-auto
-                        [:p.text-sm.text-gray-500.mb-2
+                        [:p.text-sm.opacity-60.mb-2
                          sport
                          (when-let [v (:fixture/venue fixture)] (str " · " v))
                          (when start (str " · " (.format fmt start)))]
-                        [:div#fixture-status.mb-5 {:class (str "badge badge-outline " status-cls)} status-label]
-                        [:div#score-display.flex.items-center.justify-center.gap-6.my-6
-                         {:data-fixture-id fid}
-                         [:div.flex-1.text-center
-                          [:div.text-sm.text-gray-500.mb-1 a-name]
-                          [:div#score-a.text-5xl.font-bold.leading-none (or (:a score) 0)]]
-                         [:div.text-2xl.text-gray-400 "–"]
-                         [:div.flex-1.text-center
-                          [:div.text-sm.text-gray-500.mb-1 b-name]
-                          [:div#score-b.text-5xl.font-bold.leading-none (or (:b score) 0)]]]
+                        [:div.mb-5 (shared/fixture-status-pill status-label {:id "fixture-status"})]
+                        [:div.ss-card.bg-base-100.p-7.my-6
+                         [:div#score-display.flex.items-center.justify-center.gap-6
+                          {:data-fixture-id fid}
+                          [:div.flex-1.text-center
+                           [:div.ss-label.mb-2 a-name]
+                           [:div#score-a.ss-score.ss-score-md.text-base-content (or (:a score) 0)]]
+                          [:div.ss-score.text-3xl.opacity-30 "–"]
+                          [:div.flex-1.text-center
+                           [:div.ss-label.mb-2 b-name]
+                           [:div#score-b.ss-score.ss-score-md.text-base-content (or (:b score) 0)]]]]
                         (when should-poll?
-                          [:p#last-updated.text-xs.text-gray-500.text-center.m-0
-                           "Updating live…"])
-                        [:p.mt-8.text-xs.text-gray-400.text-center "Powered by Sports Manager"]]
+                          [:p#last-updated.text-xs.opacity-60.text-center.m-0.inline-flex.items-center.justify-center.gap-2.w-full
+                           [:span.ss-live-dot] "Updating live…"])
+                        [:p.mt-8.text-xs.opacity-40.text-center "Powered by SchoolScore"]]
                        (when should-poll?
                          [:script {:src "/js/spectator-fixture.js" :type "module"}]))))
