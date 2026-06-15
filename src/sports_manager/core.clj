@@ -1,6 +1,7 @@
 (ns sports-manager.core
-  "Entry point. Boots the Jetty web server and an embedded nREPL so that
-  clojure-mcp (alias :mcp) can attach to the live process on port 7888."
+  "Entry point. Boots the Jetty web server. An embedded nREPL (so clojure-mcp,
+  alias :mcp, can attach to the live process) is opt-in via ENABLE_NREPL=true
+  and stays off in prod."
   (:require [clojure.tools.logging :as log]
             [nrepl.server :as nrepl]
             [ring.adapter.jetty :as jetty]
@@ -59,7 +60,9 @@
   (db/stop!))
 
 (defn -main
-  "Boot nREPL (for clojure-mcp) then the web server, joining the Jetty thread."
+  "Boot the web server, joining the Jetty thread. The embedded nREPL (for
+  clojure-mcp) is opt-in via ENABLE_NREPL=true so it never starts in prod."
   [& _args]
-  (start-nrepl! (env-int "NREPL_PORT" 7888))
+  (when (= "true" (System/getenv "ENABLE_NREPL"))
+    (start-nrepl! (env-int "NREPL_PORT" 7888)))
   (start! {:join? true}))
