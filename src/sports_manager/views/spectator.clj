@@ -30,7 +30,7 @@
   "Public mobile-first event landing page.
   Fixtures are rendered with live games sorted to the top; order within the
   live and non-live groups is preserved (callers pass them start-time ordered)."
-  [event participants fixtures & [{:keys [filters sports]
+  [event participants fixtures & [{:keys [filters sports tenant]
                                    :or {filters {} sports []}}]]
   (let [fmt (java.text.SimpleDateFormat. "d MMM HH:mm")
         date-fmt (java.text.SimpleDateFormat. "d MMM yyyy")
@@ -39,11 +39,17 @@
         live? (fn [f] (= "Live" (first (shared/fixture-status-label f))))
         ;; stable sort keeps the incoming start-time order within each group
         fixtures (sort-by #(if (live? %) 0 1) fixtures)
-        live-count (count (filter live? fixtures))]
+        live-count (count (filter live? fixtures))
+        logo-key (:tenant/logo-key tenant)
+        primary (:tenant/brand-primary tenant)]
     (shared/doc-public (str (:event/name event) " — SchoolScore")
                        {:code (:event/code event)}
                        [:div.mb-6
-                        [:h1.mb-1 (:event/name event)]
+                        (when logo-key
+                          [:img {:src (str "/media/" logo-key) :alt (str (:tenant/name tenant) " logo")
+                                 :style "max-height:64px;max-width:160px;margin-bottom:0.75rem;display:block"}])
+                        [:h1.mb-1 (cond-> {} primary (assoc :style (str "color:" primary)))
+                         (:event/name event)]
                         (when (:event/description event)
                           [:p.opacity-60.m-0 (:event/description event)])
                         (when (or (:event/start-at event) (:event/end-at event))

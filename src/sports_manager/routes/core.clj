@@ -11,6 +11,7 @@
             [sports-manager.routes.admin.events :as admin.events]
             [sports-manager.routes.admin.fixtures :as admin.fixtures]
             [sports-manager.routes.admin.imports :as admin.imports]
+            [sports-manager.routes.admin.settings :as admin.settings]
             [sports-manager.routes.admin.sports :as admin.sports]
             [sports-manager.routes.admin.users :as admin.users]
             [sports-manager.routes.auth :as auth]
@@ -39,6 +40,11 @@
    ["/school/sports" {:get admin.sports/sports-page :post admin.sports/sports-submit}]
    ["/school/sports/custom" {:post admin.sports/custom-sport-create}]
    ["/school/sports/custom/:sid/delete" {:post admin.sports/custom-sport-delete}]
+
+   ;; --- admin: settings & branding ---
+   ["/school/settings" {:get admin.settings/settings-page :post admin.settings/profile-submit}]
+   ["/school/settings/logo" {:post admin.settings/logo-upload}]
+   ["/school/settings/logo/clear" {:post admin.settings/logo-clear}]
 
    ;; --- admin: events ---
    ["/events/create" {:get admin.events/event-new-page}]
@@ -91,7 +97,10 @@
    ["/e" {:get pub.spectator/spectator-landing}]
    ["/e/:code" {:get pub.spectator/spectator-event-page}]
    ["/e/fixture/:fid" {:get pub.spectator/spectator-fixture-page}]
-   ["/e/fixture/:fid/score" {:get pub.spectator/spectator-fixture-score}]])
+   ["/e/fixture/:fid/score" {:get pub.spectator/spectator-fixture-score}]
+
+   ;; --- public: uploaded media (logos, banners) ---
+   ["/media/:tenant-id/:kind/:filename" {:get admin.settings/media}]])
 
 (defn- wrap-exception
   "Catch unhandled exceptions and return a structured error response."

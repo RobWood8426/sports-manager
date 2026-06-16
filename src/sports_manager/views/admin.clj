@@ -192,3 +192,94 @@
                        :value (or (:sport-template/period-labels custom-data) "")}]]]
                    [:div.mt-4
                     [:button.btn.btn-primary {:type "submit"} "Add sport"]]]]])))
+
+(defn- logo-media-url
+  "Build the public media URL for a tenant's logo from its stored key, or nil."
+  [tenant]
+  (when-let [k (:tenant/logo-key tenant)]
+    (str "/media/" k)))
+
+(defn school-settings
+  "School settings page: profile, brand colours, and logo upload (SPO-23).
+  `tenant` is the tenant entity map; `opts` may carry {:errors {...}}."
+  [tenant & [{:keys [errors] :or {errors {}}}]]
+  (let [primary (or (:tenant/brand-primary tenant) "")
+        secondary (or (:tenant/brand-secondary tenant) "")
+        logo-url (logo-media-url tenant)
+        field-err (fn [k] (when-let [e (get errors k)]
+                            [:label.label [:span.label-text-alt.text-error e]]))]
+    (shared/doc "Settings — Sports Manager"
+                {:active :settings}
+                [:h2.text-2xl.mb-2 "School settings"]
+                [:p.opacity-60.mb-6 "Your school profile and branding. The logo and colours appear on your public event pages."]
+
+                [:section.mb-10
+                 [:h3.text-xl.font-semibold.mb-4 "Profile & branding"]
+                 [:form {:method "post" :action "/school/settings"}
+                  (shared/csrf-field)
+                  [:div.grid.gap-4 {:class "grid-cols-1 sm:grid-cols-2"}
+                   [:div.form-control
+                    [:label.label [:span.label-text "School name " [:span.text-error "*"]]]
+                    [:input.input.input-bordered
+                     {:type "text" :name "tenant-name" :value (or (:tenant/name tenant) "")}]
+                    (field-err :tenant/name)]
+                   [:div.form-control
+                    [:label.label [:span.label-text "Contact email " [:span.text-error "*"]]]
+                    [:input.input.input-bordered
+                     {:type "email" :name "tenant-contact-email" :value (or (:tenant/contact-email tenant) "")}]
+                    (field-err :tenant/contact-email)]
+                   [:div.form-control
+                    [:label.label [:span.label-text "Website"]]
+                    [:input.input.input-bordered
+                     {:type "text" :name "tenant-website" :value (or (:tenant/website tenant) "")}]]
+                   [:div.form-control
+                    [:label.label [:span.label-text "City"]]
+                    [:input.input.input-bordered
+                     {:type "text" :name "tenant-city" :value (or (:tenant/city tenant) "")}]]
+                   [:div.form-control
+                    [:label.label [:span.label-text "Province"]]
+                    [:input.input.input-bordered
+                     {:type "text" :name "tenant-province" :value (or (:tenant/province tenant) "")}]]]
+                  [:div.divider.my-2 "Brand colours"]
+                  [:div.grid.gap-4 {:class "grid-cols-1 sm:grid-cols-2"}
+                   [:div.form-control
+                    [:label.label [:span.label-text "Primary colour"]]
+                    [:div.flex.items-center.gap-2
+                     [:input {:type "color" :name "brand-primary"
+                              :value (if (str/blank? primary) "#2e6bf0" primary)
+                              :style "width:3rem;height:2.5rem;padding:2px;border:none;background:none;cursor:pointer"}]
+                     [:span.text-sm.opacity-60 (if (str/blank? primary) "Default" primary)]]]
+                   [:div.form-control
+                    [:label.label [:span.label-text "Secondary colour"]]
+                    [:div.flex.items-center.gap-2
+                     [:input {:type "color" :name "brand-secondary"
+                              :value (if (str/blank? secondary) "#3ddc84" secondary)
+                              :style "width:3rem;height:2.5rem;padding:2px;border:none;background:none;cursor:pointer"}]
+                     [:span.text-sm.opacity-60 (if (str/blank? secondary) "Default" secondary)]]]]
+                  [:div.mt-4
+                   [:button.btn.btn-primary {:type "submit"} "Save settings"]]]]
+
+                [:section
+                 [:h3.text-xl.font-semibold.mb-4 "Logo"]
+                 (when (:file errors)
+                   [:div.alert.alert-error.mb-4 [:span (:file errors)]])
+                 (if logo-url
+                   [:div.flex.items-center.gap-4.mb-4
+                    [:img {:src logo-url :alt "School logo"
+                           :style "max-width:120px;max-height:120px;border-radius:var(--ss-radius);background:var(--color-base-200);padding:8px"}]
+                    [:form {:method "post" :action "/school/settings/logo/clear"}
+                     (shared/csrf-field)
+                     [:button.btn.btn-sm.btn-outline.btn-error
+                      {:type "submit" :onclick "return confirm('Remove the current logo?')"}
+                      "Remove logo"]]]
+                   [:p.opacity-50.text-sm.mb-4 "No logo uploaded yet."])
+                 [:form {:method "post" :action "/school/settings/logo"
+                         :enctype "multipart/form-data"}
+                  (shared/csrf-field)
+                  [:div.form-control
+                   [:label.label [:span.label-text "Upload a logo"]]
+                   [:input.file-input.file-input-bordered
+                    {:type "file" :name "logo-file" :accept "image/png,image/jpeg,image/webp"}]
+                   [:label.label [:span.label-text-alt "PNG, JPEG, or WebP — max 2 MB"]]]
+                  [:div.mt-3
+                   [:button.btn {:type "submit"} (if logo-url "Replace logo" "Upload logo")]]]])))

@@ -13,6 +13,7 @@
   [[:events "Events" "/"]
    [:users "Manage users" "/users"]
    [:sports "Sports" "/school/sports"]
+   [:settings "Settings" "/school/settings"]
    [:disputes "Disputes" "/disputes"]
    [:audit "Audit log" "/audit"]])
 

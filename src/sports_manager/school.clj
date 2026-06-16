@@ -42,6 +42,8 @@
                     :tenant/country :tenant/contact-email
                     :tenant/contact-phone :tenant/website
                     :tenant/latitude :tenant/longitude
+                    :tenant/logo-key :tenant/logo-content-type
+                    :tenant/brand-primary :tenant/brand-secondary
                     :tenant/created-at]
                    tenant-id)]
     (when (:tenant/id e) e)))
@@ -89,3 +91,33 @@
                    :tenant/website :tenant/latitude :tenant/longitude]]
     (db/merge! tenant-id (select-keys profile updatable))
     (find-by-id tenant-id)))
+
+(defn set-colours!
+  "Set/clear a tenant's brand colours. Each colour is a hex string (e.g.
+  \"#2e6bf0\") or nil/blank to clear. Returns the updated entity."
+  [tenant-id {:keys [primary secondary]}]
+  (let [clean (fn [c] (when-not (str/blank? c) (str/trim c)))
+        asserts (cond-> {}
+                  (clean primary) (assoc :tenant/brand-primary (clean primary))
+                  (clean secondary) (assoc :tenant/brand-secondary (clean secondary)))
+        retract (cond-> []
+                  (str/blank? primary) (conj :tenant/brand-primary)
+                  (str/blank? secondary) (conj :tenant/brand-secondary))]
+    (when (seq retract) (db/retract-attrs! tenant-id retract))
+    (when (seq asserts) (db/merge! tenant-id asserts))
+    (find-by-id tenant-id)))
+
+(defn set-logo!
+  "Record the storage key + content-type of a tenant's uploaded logo.
+  Returns the updated entity."
+  [tenant-id logo-key content-type]
+  (db/merge! tenant-id {:tenant/logo-key logo-key
+                        :tenant/logo-content-type content-type})
+  (find-by-id tenant-id))
+
+(defn clear-logo!
+  "Remove the logo reference from a tenant. Returns the updated entity.
+  Does not delete the stored object — the caller handles storage cleanup."
+  [tenant-id]
+  (db/retract-attrs! tenant-id [:tenant/logo-key :tenant/logo-content-type])
+  (find-by-id tenant-id))

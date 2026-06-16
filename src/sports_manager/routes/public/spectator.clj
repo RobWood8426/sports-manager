@@ -9,6 +9,7 @@
             [sports-manager.fixture :as fixture]
             [sports-manager.participant :as participant]
             [sports-manager.routes.shared :as shared]
+            [sports-manager.school :as school]
             [sports-manager.score :as score]
             [sports-manager.views.spectator :as views.spectator]))
 
@@ -57,9 +58,11 @@
                                              (:final-score/status final)))))
                           filtered)
             sports (event-sport/list-by-event event-id)
-            participants (participant/list-by-event event-id)]
+            participants (participant/list-by-event event-id)
+            tenant (school/find-by-id (:event/tenant ev))]
         (shared/html (views.spectator/spectator-event ev participants enriched
-                                                      {:filters filters :sports sports}))))))
+                                                      {:filters filters :sports sports
+                                                       :tenant tenant}))))))
 
 (defn spectator-fixture-page
   "GET /e/fixture/:fid — public live score detail page for a single fixture."
