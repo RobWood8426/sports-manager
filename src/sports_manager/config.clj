@@ -43,3 +43,16 @@
 (def base-url
   "Public base URL used in QR codes and email links. Defaults to localhost for dev."
   (or (get-env "SM_BASE_URL") "http://localhost:3000"))
+
+(def upload-dir
+  "Directory for user-uploaded files (logos, banners). Must live inside the
+  Fly volume mount (/data/xtdb) so uploads survive deploys — defaults to a
+  subdir of the XTDB data dir. Override with SM_UPLOAD_DIR."
+  (or (get-env "SM_UPLOAD_DIR")
+      (str xtdb-data-dir "/uploads")))
+
+(def max-upload-bytes
+  "Maximum accepted upload size in bytes (default 2 MiB). Override with
+  SM_MAX_UPLOAD_BYTES."
+  (or (some-> (get-env "SM_MAX_UPLOAD_BYTES") parse-long)
+      (* 2 1024 1024)))
