@@ -27,14 +27,19 @@
                         [:button.btn.btn-primary.btn-lg.w-full {:type "submit"} "Go to event"]]]]))
 
 (defn spectator-event
-  "Public mobile-first event landing page."
+  "Public mobile-first event landing page.
+  Fixtures are rendered with live games sorted to the top; order within the
+  live and non-live groups is preserved (callers pass them start-time ordered)."
   [event participants fixtures & [{:keys [filters sports]
                                    :or {filters {} sports []}}]]
   (let [fmt (java.text.SimpleDateFormat. "d MMM HH:mm")
         date-fmt (java.text.SimpleDateFormat. "d MMM yyyy")
         sport-filter (get filters :sport-code "")
         team-filter (get filters :team-name "")
-        live-count (count (filter #(= "Live" (first (shared/fixture-status-label %))) fixtures))]
+        live? (fn [f] (= "Live" (first (shared/fixture-status-label f))))
+        ;; stable sort keeps the incoming start-time order within each group
+        fixtures (sort-by #(if (live? %) 0 1) fixtures)
+        live-count (count (filter live? fixtures))]
     (shared/doc-public (str (:event/name event) " — SchoolScore")
                        {:code (:event/code event)}
                        [:div.mb-6

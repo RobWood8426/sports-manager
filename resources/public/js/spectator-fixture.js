@@ -38,7 +38,7 @@ async function poll() {
 
     if (data.finalStatus) {
       const label = {
-        accepted: 'Final',
+        accepted: 'Final Score',
         disputed: 'Disputed',
         pending:  'Pending',
       }[data.finalStatus] ?? data.finalStatus;

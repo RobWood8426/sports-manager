@@ -250,7 +250,7 @@
         start (:fixture/start-at f)
         fs (:fixture/final-score-status f)]
     (cond
-      (#{:final-score.status/accepted} fs) ["Final" "text-success font-semibold"]
+      (#{:final-score.status/accepted} fs) ["Final Score" "text-primary font-semibold"]
       (#{:final-score.status/disputed} fs) ["Disputed" "text-error font-semibold"]
       (#{:final-score.status/pending} fs) ["Pending" "text-warning font-semibold"]
       (and end (.before end now)) ["Ended" "opacity-50"]
@@ -261,7 +261,7 @@
   "Tint status pill for a public-facing fixture, matching the design system's
   StatusBadge: a translucent tinted fill + matching text + subtle border, pill
   radius. Live also gets the pulsing dot. `label` is one of the strings from
-  `fixture-status-label` (Live / Final / Pending / Disputed / Ended / Upcoming).
+  `fixture-status-label` (Live / Final Score / Pending / Disputed / Ended / Upcoming).
   An optional `attrs` map is merged onto the pill span (e.g. an `:id` the
   spectator detail page's poller targets)."
   ([label] (fixture-status-pill label nil))
@@ -269,7 +269,7 @@
    (let [;; [text+border colour token, tint background] per status tone
          [tone tint] (case label
                        "Live" ["var(--ss-accent)" "var(--ss-tint-accent)"]
-                       "Final" ["var(--color-success)" "color-mix(in oklch, var(--color-success) 15%, transparent)"]
+                       "Final Score" ["var(--color-primary)" "color-mix(in oklch, var(--color-primary) 15%, transparent)"]
                        "Pending" ["var(--color-warning)" "color-mix(in oklch, var(--color-warning) 16%, transparent)"]
                        "Disputed" ["var(--color-error)" "color-mix(in oklch, var(--color-error) 16%, transparent)"]
                        ;; Ended / Upcoming — quiet, no fill
