@@ -123,6 +123,11 @@
                           {:type "submit"
                            :onclick "return confirm('Submit final score? This cannot be undone.')"}
                           "Submit final score"]]
+                        [:p.text-center.m-0
+                         [:a.text-sm.opacity-60.no-underline
+                          {:href (str "/e/fixture/" fixture-id) :target "_blank" :rel "noopener"
+                           :class "hover:opacity-100 transition-opacity"}
+                          "View public scoreboard →"]]
                         (when-let [s (:fixture/start-at fixture)]
                           [:p.text-xs.opacity-50.text-center.mt-2 (.format fmt s)])]
                        [:script {:src "/js/score-queue.js" :type "module"}]

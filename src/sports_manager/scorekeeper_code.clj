@@ -227,7 +227,9 @@
          (sort-by :assignment/created-at))))
 
 (defn find-fixture-by-code
-  "Look up the fixture for a valid (active, non-expired) scode id."
+  "Look up the fixture for a valid (active, non-expired) scode id.
+  Joins the sport-template and both team participants so callers can read
+  nested names/period-labels (the confirm + live scoring views expect these)."
   [scode-id]
   (when-let [sc (find-by-id scode-id)]
     (when (= :scode.status/active (:scode/status sc))
@@ -236,9 +238,11 @@
                   (.after (:scode/expires-at sc) now))
           (db/pull [:fixture/id :fixture/match-number :fixture/age-group :fixture/venue
                     :fixture/start-at :fixture/end-at :fixture/status
-                    :fixture/sport-template :fixture/team-a :fixture/team-b]
+                    {:fixture/sport-template [:sport-template/code :sport-template/name
+                                              :sport-template/period-labels]}
+                    {:fixture/team-a [:participant/id :participant/name]}
+                    {:fixture/team-b [:participant/id :participant/name]}]
                    (get-in sc [:scode/fixture :fixture/id])))))))
-
 
 (defn find-active-by-plaintext
   "Look up an active, non-expired scode entity by its plaintext code string."

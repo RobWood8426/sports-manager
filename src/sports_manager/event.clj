@@ -84,6 +84,7 @@
    :event/start-at :event/end-at :event/status
    :event/visibility :event/access-method
    :event/code :event/published-at
+   :event/tenant
    :event/sport-templates])
 
 (defn list-by-tenant

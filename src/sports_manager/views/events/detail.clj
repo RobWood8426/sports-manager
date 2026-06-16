@@ -276,8 +276,14 @@
                 [:section {:id "fixtures-section"}
                  [:div.flex.items-center.justify-between.gap-3.mb-3.flex-wrap
                   [:h2.ss-label.m-0 "Fixtures"]
-                  (when (seq participants)
-                    [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/import")} "Import CSV"])]
+                  [:div.flex.items-center.gap-2.flex-wrap
+                   (when (seq fixtures)
+                     (list
+                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/fixtures/export")} "Export fixtures"]
+                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/results/export")} "Export results"]
+                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/score-audit/export")} "Export score audit"]))
+                   (when (seq participants)
+                     [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/import")} "Import CSV"])]]
                  [:details.ss-card.mb-4
                   [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm
                    "Filters" (when filter-active? " (active)")]

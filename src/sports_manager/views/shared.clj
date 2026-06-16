@@ -19,11 +19,13 @@
 (defn- brand
   "SchoolScore logo lockup (design-system `Logo`): the scoreboard mark + the
   wordmark — \"School\" at full strength, \"Score\" in brand blue, Archivo
-  extrabold. Links home. `size` is the mark edge in px."
-  ([] (brand 28))
-  ([size]
+  extrabold. `size` is the mark edge in px. `href` is the link target (default
+  \"/\" for authed pages; public pages pass a public-safe destination)."
+  ([] (brand 28 "/"))
+  ([size] (brand size "/"))
+  ([size href]
    [:a.flex.items-center.shrink-0
-    {:href "/" :style (str "text-decoration:none;gap:" (Math/round (* size 0.42)) "px")}
+    {:href href :style (str "text-decoration:none;gap:" (Math/round (* size 0.42)) "px")}
     [:svg {:width size :height size :viewBox "0 0 64 64" :fill "none"
            :aria-hidden "true" :style "display:block;flex:none"}
      [:rect {:x "2" :y "2" :width "60" :height "60" :rx "16" :fill "#2e6bf0"}]
@@ -103,12 +105,16 @@
   right):
     :brand? true   render the public brand header
     :code  \"IHSD26\"  show a `code · IHSD26` chip on the right (implies :brand?)
-  With no options map the page is chrome-free (the bare code-entry screens)."
+  With no options map the page is chrome-free (the bare code-entry screens).
+
+  The brand link points at a public destination (the event landing when a code
+  is known, otherwise the code-entry page) — never an authed route like \"/\"."
   [title & args]
   (let [opts (when (map? (first args)) (first args))
         body (if opts (rest args) args)
         {:keys [code]} opts
-        show-header? (boolean (or code (:brand? opts)))]
+        show-header? (boolean (or code (:brand? opts)))
+        brand-href (if code (str "/e/" code) "/e")]
     (str
      "<!DOCTYPE html>"
      (h/html
@@ -128,7 +134,7 @@
         (when show-header?
           [:header.flex.items-center.justify-between
            {:style "padding:0.875rem 1.25rem;border-bottom:1px solid var(--color-base-300);background:var(--color-base-100)"}
-           (brand 22)
+           (brand 22 brand-href)
            (when code
              [:span.ss-mono {:style "font-size:var(--text-xs, 0.75rem);color:var(--text-subtle)"}
               (str "code · " code)])])

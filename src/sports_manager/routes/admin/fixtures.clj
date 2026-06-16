@@ -6,8 +6,10 @@
             [sports-manager.event :as event]
             [sports-manager.final-score :as final-score]
             [sports-manager.fixture :as fixture]
+            [sports-manager.fixture-export :as fixture-export]
             [sports-manager.participant :as participant]
             [sports-manager.routes.shared :as shared]
+            [sports-manager.score :as score]
             [sports-manager.scorekeeper-code :as scode]
             [sports-manager.sport-template :as sport-template]
             [sports-manager.venue :as venue]
@@ -17,6 +19,75 @@
 (defn- event-detail-sports [ev]
   (let [codes (into #{} (map :sport-template/code) (:event/sport-templates ev))]
     (filter #(contains? codes (:sport-template/code %)) (sport-template/list-all))))
+
+(declare with-tenant-event csv-download)
+
+(defn fixture-export-csv
+  "GET /events/:id/fixtures/export — download the event's fixtures as a CSV
+  whose columns round-trip through the import wizard. Tenant-isolated."
+  [request]
+  (with-tenant-event
+    request
+    (fn [_tenant-id ev]
+      (let [fixtures (fixture/list-by-event (:event/id ev))]
+        (csv-download (fixture-export/fixtures->csv fixtures)
+                      (fixture-export/filename (:event/name ev)))))))
+
+(defn- csv-download
+  "Build a CSV download response with the given filename."
+  [csv fname]
+  (-> (resp/response csv)
+      (resp/content-type "text/csv; charset=utf-8")
+      (resp/header "Content-Disposition"
+                   (str "attachment; filename=\"" fname "\""))))
+
+(defn- with-tenant-event
+  "Resolve the path :id to an event owned by the active tenant, then call
+  (f tenant-id event). Returns a redirect/404 when unauthenticated or the event
+  is missing / belongs to another tenant (tenant isolation)."
+  [request f]
+  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
+    (if-not tenant-id
+      user-or-redirect
+      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
+            ev (when event-id (event/find-by-id event-id))]
+        (if-not (and ev (= tenant-id (:event/tenant ev)))
+          {:status 404 :body "Event not found"}
+          (f tenant-id ev))))))
+
+(defn fixture-results-export-csv
+  "GET /events/:id/results/export — download accepted final scores as CSV."
+  [request]
+  (with-tenant-event
+    request
+    (fn [_tenant-id ev]
+      (let [fixtures (fixture/list-by-event (:event/id ev))
+            enriched (->> fixtures
+                          (map (fn [f]
+                                 (let [final (->> (final-score/find-by-fixture (:fixture/id f))
+                                                  (filter #(= :final-score.status/accepted
+                                                              (:final-score/status %)))
+                                                  first)]
+                                   (when final {:fixture f :final final}))))
+                          (remove nil?))]
+        (csv-download (fixture-export/results->csv enriched)
+                      (fixture-export/results-filename (:event/name ev)))))))
+
+(defn fixture-audit-export-csv
+  "GET /events/:id/score-audit/export — download the append-only score-event log
+  for the event as CSV."
+  [request]
+  (with-tenant-event
+    request
+    (fn [_tenant-id ev]
+      (let [fixtures (fixture/list-by-event (:event/id ev))
+            enriched (->> fixtures
+                          (map (fn [f]
+                                 {:fixture f
+                                  :events (score/score-history (:fixture/id f))}))
+                          (filter #(seq (:events %))))]
+        (csv-download (fixture-export/audit->csv enriched)
+                      (fixture-export/audit-filename (:event/name ev)))))))
 
 (defn fixture-create
   "POST /events/:id/fixtures — validate and create a draft fixture."
