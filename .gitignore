@@ -13,6 +13,10 @@
 /.secrets/
 .mcp.json
 
+# Local app data — XTDB RocksDB + user uploads (logos, banners).
+# Mirrors the Fly volume; never commit. (SM_XTDB_DATA_DIR / SM_UPLOAD_DIR)
+/data/
+
 # Datomic transactor data (Docker volume mounts)
 /.datomic-data/
 /.datomic-log/
