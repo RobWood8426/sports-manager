@@ -106,8 +106,9 @@
                        [:p.mt-8.text-xs.opacity-40.text-center "Powered by SchoolScore"])))
 
 (defn spectator-fixture
-  "Public live score detail page for a single fixture."
-  [fixture]
+  "Public live score detail page for a single fixture.
+  `event-code` (optional) renders a back link to the event summary screen."
+  [fixture & [{:keys [event-code]}]]
   (let [fmt (java.text.SimpleDateFormat. "d MMM HH:mm")
         fid (str (:fixture/id fixture))
         score (:fixture/live-score fixture)
@@ -121,6 +122,11 @@
     (shared/doc-public (str a-name " vs " b-name " — SchoolScore")
                        {:brand? true}
                        [:div.max-w-lg.mx-auto
+                        (when-not (str/blank? event-code)
+                          [:a.inline-flex.items-center.gap-1.text-sm.opacity-60.no-underline.mb-4
+                           {:href (str "/e/" event-code)
+                            :class "hover:opacity-100 transition-opacity"}
+                           [:span "←"] [:span "Back to event"]])
                         [:p.text-sm.opacity-60.mb-2
                          sport
                          (when-let [v (:fixture/venue fixture)] (str " · " v))

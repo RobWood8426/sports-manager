@@ -73,9 +73,10 @@
             final (->> (final-score/find-by-fixture fid)
                        (filter #(= :final-score.status/accepted (:final-score/status %)))
                        first)
+            event-code (some-> (:fixture/event f) event/find-by-id :event/code)
             enriched (cond-> (assoc f :fixture/live-score live-score)
                        final (assoc :fixture/final-score-status (:final-score/status final)))]
-        (shared/html (views.spectator/spectator-fixture enriched))))))
+        (shared/html (views.spectator/spectator-fixture enriched {:event-code event-code}))))))
 
 (defn spectator-fixture-score
   "GET /e/fixture/:fid/score — public JSON polling endpoint for live score."

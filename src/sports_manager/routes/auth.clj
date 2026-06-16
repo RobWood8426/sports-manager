@@ -97,10 +97,15 @@
       (assoc :session {})))
 
 (defn select-tenant-page
-  "GET /select-tenant — show a picker of the user's active memberships."
+  "GET /select-tenant — show a picker of the user's active memberships.
+  Each membership's :membership/tenant is a UUID scalar; hydrate it into the
+  full tenant entity so the view can render the name/city."
   [request]
   (if-let [uid (:uid request)]
-    (let [memberships (membership/list-active-by-user uid)]
+    (let [memberships (->> (membership/list-active-by-user uid)
+                           (mapv (fn [m]
+                                   (assoc m :membership/tenant
+                                          (school/find-by-id (:membership/tenant m))))))]
       (if (empty? memberships)
         (resp/redirect "/school/setup")
         (shared/html (views.auth/select-tenant memberships))))
