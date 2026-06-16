@@ -100,22 +100,25 @@
                     " "
                     [:a.link.link-primary {:href (str "/events/" event-id "/qr") :target "_blank"} "QR Code"]])]
                 [:section.mb-8
-                 [:h2.ss-label.block.mb-3 "Participating schools"]
                  (if (seq participants)
-                   [:div.flex.flex-col.gap-2.mb-4
-                    (for [p participants]
-                      [:div.flex.items-center.gap-3.ss-card.px-4.py-3
-                       [:div.flex-1
-                        [:span.font-semibold (:participant/name p)]
-                        (when-let [t (get-in p [:participant/tenant :tenant/name])]
-                          [:span.text-sm.opacity-50.ml-2 (str "(" t ")")])]
-                       [:span.text-sm.opacity-50 (or (:participant/contact-email p) "")]
-                       (shared/participant-status-badge (:participant/status p))
-                       [:form {:method "post"
-                               :action (str "/events/" event-id "/participants/" (:participant/id p) "/remove")}
-                        (shared/csrf-field)
-                        [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])]
-                   [:p.opacity-50.mb-4 "No schools added yet."])
+                   (shared/collapsible-list
+                    "Participating schools" (count participants)
+                    [:div.flex.flex-col.gap-2.mb-4
+                     (for [p participants]
+                       [:div.flex.items-center.gap-3.ss-card.px-4.py-3
+                        [:div.flex-1
+                         [:span.font-semibold (:participant/name p)]
+                         (when-let [t (get-in p [:participant/tenant :tenant/name])]
+                           [:span.text-sm.opacity-50.ml-2 (str "(" t ")")])]
+                        [:span.text-sm.opacity-50 (or (:participant/contact-email p) "")]
+                        (shared/participant-status-badge (:participant/status p))
+                        [:form {:method "post"
+                                :action (str "/events/" event-id "/participants/" (:participant/id p) "/remove")}
+                         (shared/csrf-field)
+                         [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])])
+                   [:div.mb-4
+                    [:h2.ss-label.block.mb-3 "Participating schools"]
+                    [:p.opacity-50 "No schools added yet."]])
                  [:details.ss-card
                   [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add participating school"]
                   [:div.px-4.pb-4.pt-2
@@ -165,29 +168,32 @@
                                label])]
                            [:button.btn.btn-sm.btn-primary {:type "submit"} "Save"]]]]))]])
                 [:section.mb-8
-                 [:h2.ss-label.block.mb-3 "Venues"]
                  (if (seq venues)
-                   [:div.flex.flex-col.gap-2.mb-4
-                    (for [v venues]
-                      (let [type-label (get {"venue.type/field" "Field"
-                                             "venue.type/court" "Court"
-                                             "venue.type/pool" "Pool"
-                                             "venue.type/track" "Track"
-                                             "venue.type/pitch" "Pitch"
-                                             "venue.type/astro" "Astroturf"
-                                             "venue.type/hall" "Hall"
-                                             "venue.type/other" "Other"}
-                                            (some-> v :venue/type name) "—")]
-                        [:div.flex.items-center.gap-3.ss-card.px-4.py-3
-                         [:span.font-semibold.flex-1 (:venue/name v)]
-                         [:span.text-sm.opacity-50 type-label]
-                         (when-let [o (:venue/display-order v)]
-                           [:span.text-sm.opacity-50 (str "#" o)])
-                         [:form {:method "post"
-                                 :action (str "/events/" event-id "/venues/" (:venue/id v) "/delete")}
-                          (shared/csrf-field)
-                          [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]]))]
-                   [:p.opacity-50.mb-4 "No venues added yet."])
+                   (shared/collapsible-list
+                    "Venues" (count venues)
+                    [:div.flex.flex-col.gap-2.mb-4
+                     (for [v venues]
+                       (let [type-label (get {"venue.type/field" "Field"
+                                              "venue.type/court" "Court"
+                                              "venue.type/pool" "Pool"
+                                              "venue.type/track" "Track"
+                                              "venue.type/pitch" "Pitch"
+                                              "venue.type/astro" "Astroturf"
+                                              "venue.type/hall" "Hall"
+                                              "venue.type/other" "Other"}
+                                             (some-> v :venue/type name) "—")]
+                         [:div.flex.items-center.gap-3.ss-card.px-4.py-3
+                          [:span.font-semibold.flex-1 (:venue/name v)]
+                          [:span.text-sm.opacity-50 type-label]
+                          (when-let [o (:venue/display-order v)]
+                            [:span.text-sm.opacity-50 (str "#" o)])
+                          [:form {:method "post"
+                                  :action (str "/events/" event-id "/venues/" (:venue/id v) "/delete")}
+                           (shared/csrf-field)
+                           [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]]))])
+                   [:div.mb-4
+                    [:h2.ss-label.block.mb-3 "Venues"]
+                    [:p.opacity-50 "No venues added yet."]])
                  [:details.ss-card
                   [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add venue"]
                   [:div.px-4.pb-4.pt-2
@@ -217,26 +223,29 @@
                      [:button.btn.btn-sm {:type "submit"} "Add venue"]]]]]]
                 (when (seq participants)
                   [:section.mb-8
-                   [:h2.ss-label.block.mb-3 "Teams"]
                    (if (seq teams)
-                     [:div.flex.flex-col.gap-2.mb-4
-                      (for [t teams]
-                        [:div.flex.items-center.gap-3.ss-card.px-4.py-3
-                         [:span.font-semibold.flex-1 (:team/name t)]
-                         [:span.text-sm.opacity-50 (get-in t [:team/participant :participant/name])]
-                         [:span.text-sm.opacity-50 (get-in t [:team/sport :sport-template/name])]
-                         (when-let [ag (:team/age-group t)]
-                           [:span.badge.badge-sm.badge-outline ag])
-                         (when-let [g (:team/gender t)]
-                           [:span.badge.badge-sm.badge-outline
-                            (get {:team.gender/boys "Boys"
-                                  :team.gender/girls "Girls"
-                                  :team.gender/mixed "Mixed"} g)])
-                         [:form {:method "post"
-                                 :action (str "/events/" event-id "/teams/" (:team/id t) "/delete")}
-                          (shared/csrf-field)
-                          [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])]
-                     [:p.opacity-50.mb-4 "No teams added yet."])
+                     (shared/collapsible-list
+                      "Teams" (count teams)
+                      [:div.flex.flex-col.gap-2.mb-4
+                       (for [t teams]
+                         [:div.flex.items-center.gap-3.ss-card.px-4.py-3
+                          [:span.font-semibold.flex-1 (:team/name t)]
+                          [:span.text-sm.opacity-50 (get-in t [:team/participant :participant/name])]
+                          [:span.text-sm.opacity-50 (get-in t [:team/sport :sport-template/name])]
+                          (when-let [ag (:team/age-group t)]
+                            [:span.badge.badge-sm.badge-outline ag])
+                          (when-let [g (:team/gender t)]
+                            [:span.badge.badge-sm.badge-outline
+                             (get {:team.gender/boys "Boys"
+                                   :team.gender/girls "Girls"
+                                   :team.gender/mixed "Mixed"} g)])
+                          [:form {:method "post"
+                                  :action (str "/events/" event-id "/teams/" (:team/id t) "/delete")}
+                           (shared/csrf-field)
+                           [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])])
+                     [:div.mb-4
+                      [:h2.ss-label.block.mb-3 "Teams"]
+                      [:p.opacity-50 "No teams added yet."]])
                    [:details.ss-card
                     [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add team"]
                     [:div.px-4.pb-4.pt-2

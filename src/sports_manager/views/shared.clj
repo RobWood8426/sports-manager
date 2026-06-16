@@ -290,6 +290,28 @@
                attrs)
         label]))))
 
+(def ^:private collapse-threshold
+  "Lists with more items than this are collapsed by default."
+  6)
+
+(defn collapsible-list
+  "A `<details>` disclosure wrapping a long list. The summary shows `label` and
+  the item `count`; the list starts open when small (count <= threshold) and
+  collapsed when long, so admins aren't faced with a wall of rows.
+
+  `body` is the already-rendered list hiccup (or an empty-state element).
+  Pass `:open? true/false` to force the initial state. Native <details>/<summary>
+  — no JS."
+  [label cnt body & [{:keys [open?]}]]
+  (let [open? (if (some? open?) open? (<= cnt collapse-threshold))]
+    [:details (cond-> {:class "mb-4"} open? (assoc :open true))
+     [:summary.cursor-pointer.select-none.flex.items-center.gap-2.mb-3.text-sm.font-medium
+      {:style "list-style:none"}
+      [:span.ss-label.m-0 label]
+      [:span.badge.badge-sm.badge-outline cnt]
+      [:span.opacity-40 "▾"]]
+     body]))
+
 (defn error-page
   "Generic error page. `status` is the HTTP status code, `message` is human-readable."
   [status message]
