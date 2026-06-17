@@ -20,15 +20,15 @@
   (let [codes (into #{} (map :sport-template/code) (:event/sport-templates ev))]
     (filter #(contains? codes (:sport-template/code %)) (sport-template/list-all))))
 
-(declare with-tenant-event csv-download)
+(declare csv-download)
 
 (defn fixture-export-csv
   "GET /events/:id/fixtures/export — download the event's fixtures as a CSV
   whose columns round-trip through the import wizard. Tenant-isolated."
   [request]
-  (with-tenant-event
+  (shared/with-tenant-event
     request
-    (fn [_tenant-id ev]
+    (fn [_user _tenant-id ev _m]
       (let [fixtures (fixture/list-by-event (:event/id ev))]
         (csv-download (fixture-export/fixtures->csv fixtures)
                       (fixture-export/filename (:event/name ev)))))))
@@ -41,26 +41,14 @@
       (resp/header "Content-Disposition"
                    (str "attachment; filename=\"" fname "\""))))
 
-(defn- with-tenant-event
-  "Resolve the path :id to an event owned by the active tenant, then call
-  (f tenant-id event). Returns a redirect/404 when unauthenticated or the event
-  is missing / belongs to another tenant (tenant isolation)."
-  [request f]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not (and ev (= tenant-id (:event/tenant ev)))
-          {:status 404 :body "Event not found"}
-          (f tenant-id ev))))))
+;; with-tenant-event now lives in routes.shared (SPO-61) — used via shared/.
 
 (defn fixture-results-export-csv
   "GET /events/:id/results/export — download accepted final scores as CSV."
   [request]
-  (with-tenant-event
+  (shared/with-tenant-event
     request
-    (fn [_tenant-id ev]
+    (fn [_user _tenant-id ev _m]
       (let [fixtures (fixture/list-by-event (:event/id ev))
             enriched (->> fixtures
                           (map (fn [f]
@@ -77,9 +65,9 @@
   "GET /events/:id/score-audit/export — download the append-only score-event log
   for the event as CSV."
   [request]
-  (with-tenant-event
+  (shared/with-tenant-event
     request
-    (fn [_tenant-id ev]
+    (fn [_user _tenant-id ev _m]
       (let [fixtures (fixture/list-by-event (:event/id ev))
             enriched (->> fixtures
                           (map (fn [f]
@@ -92,39 +80,33 @@
 (defn fixture-create
   "POST /events/:id/fixtures — validate and create a draft fixture."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not ev
-          {:status 404 :body "Event not found"}
-          (let [params (shared/form-params request)
-                parsed (fixture/parse-form params)
-                errors (fixture/validate parsed)]
-            (if (seq errors)
-              (shared/html (views.events/event-detail ev
-                                                      (participant/list-by-event event-id)
-                                                      (fixture/list-by-event event-id)
-                                                      (event-detail-sports ev)
-                                                      {:fixture-errors errors
-                                                       :venues (venue/list-by-event event-id)}))
-              (do
-                (fixture/create! event-id (:user/firebase-uid current-user) parsed)
-                (resp/redirect (str "/events/" event-id))))))))))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            params (shared/form-params request)
+            parsed (fixture/parse-form params)
+            errors (fixture/validate parsed)]
+        (if (seq errors)
+          (shared/html (views.events/event-detail ev
+                                                  (participant/list-by-event event-id)
+                                                  (fixture/list-by-event event-id)
+                                                  (event-detail-sports ev)
+                                                  {:fixture-errors errors
+                                                   :venues (venue/list-by-event event-id)}))
+          (do
+            (fixture/create! event-id (:user/firebase-uid current-user) parsed)
+            (resp/redirect (str "/events/" event-id))))))))
 
 (defn fixture-edit
   "POST /events/:id/fixtures/:fid — update a fixture's fields."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not (and ev fixture-id)
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))]
+        (if-not fixture-id
           {:status 404 :body "Not found"}
           (let [params (shared/form-params request)
                 parsed (fixture/parse-form params)
@@ -142,13 +124,12 @@
 (defn fixture-publish
   "POST /events/:id/fixtures/:fid/publish — transition a fixture to published."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))]
-        (if-not (and event-id fixture-id)
+        (if-not fixture-id
           {:status 404 :body "Not found"}
           (do
             (fixture/publish! fixture-id (:user/firebase-uid current-user))
@@ -157,13 +138,12 @@
 (defn fixture-code-generate
   "POST /events/:id/fixtures/:fid/codes — generate a new scorekeeper code."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))]
-        (if-not (and event-id fixture-id)
+        (if-not fixture-id
           {:status 404 :body "Not found"}
           (let [{:keys [code]} (scode/generate! fixture-id (:user/firebase-uid current-user))]
             (resp/redirect (str "/events/" event-id "?new-code=" code
@@ -173,14 +153,13 @@
 (defn fixture-code-revoke
   "POST /events/:id/fixtures/:fid/codes/:cid/revoke — revoke a scorekeeper code."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
             code-id (shared/parse-event-id (get-in request [:path-params :cid]))]
-        (if-not (and event-id fixture-id code-id)
+        (if-not (and fixture-id code-id)
           {:status 404 :body "Not found"}
           (do
             (scode/revoke! code-id (:user/firebase-uid current-user))
@@ -189,14 +168,13 @@
 (defn fixture-code-qr
   "GET /events/:id/fixtures/:fid/codes/:cid/qr — QR code PNG for a scorekeeper code URL."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id _ev _m]
+      (let [fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
             code-id (shared/parse-event-id (get-in request [:path-params :cid]))
             sc (when code-id (scode/find-by-id code-id))]
-        (if-not (and event-id fixture-id sc)
+        (if-not (and fixture-id sc)
           {:status 404 :body "Not found"}
           (let [url (str (shared/request->base-url request) "/score")
                 png (event/qr-png-for-text url)]
@@ -208,14 +186,13 @@
 (defn fixture-assign-scorekeeper
   "POST /events/:id/fixtures/:fid/assign — create a labelled scorekeeper assignment."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
             label (str/trim (get (shared/form-params request) "label" ""))]
-        (if-not (and event-id fixture-id)
+        (if-not fixture-id
           {:status 404 :body "Not found"}
           (do
             (scode/assign! fixture-id
@@ -226,10 +203,10 @@
 (defn fixture-comparison-page
   "GET /events/:id/fixtures/:fid/comparison — show two scorekeeper submissions side-by-side."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
             f (when fixture-id (fixture/find-by-id fixture-id))]
         (if-not f
@@ -241,11 +218,11 @@
 (defn fixture-dispute-resolve
   "POST /events/:id/fixtures/:fid/resolve — admin confirms scores and resolves dispute."
   [request]
-  (let [[user-or-redirect _tenant-id] (shared/require-tenant request)]
-    (if-not _tenant-id
-      user-or-redirect
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
       (let [params (shared/form-params request)
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
+            event-id (:event/id ev)
             fixture-id (shared/parse-event-id (get-in request [:path-params :fid]))
             confirmed-a (some-> (get params "confirmed-a") parse-long)
             confirmed-b (some-> (get params "confirmed-b") parse-long)

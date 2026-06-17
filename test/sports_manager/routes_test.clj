@@ -7,7 +7,7 @@
     (let [resp (routes/handler {:request-method :get :uri "/"})]
       (is (= 200 (:status resp)))
       (is (re-find #"<!DOCTYPE html>" (:body resp)))
-      (is (re-find #"Sign in or sign up" (:body resp)))
+      (is (re-find #"Sign in or create an account" (:body resp)))
       (is (re-find #"Continue with Google" (:body resp))))))
 
 (deftest login-alias

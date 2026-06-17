@@ -54,69 +54,60 @@
 (defn event-detail-page
   "GET /events/:id — show event detail with participants, teams, and fixtures."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not ev
-          {:status 404 :body "Event not found"}
-          (let [qp (or (:query-params request) {})
-                fixture-filters {:sport-code (get qp "sport")
-                                 :team-name (get qp "team")
-                                 :age-group (get qp "age-group")
-                                 :venue (get qp "venue")
-                                 :status (get qp "status")
-                                 :date (get qp "date")}
-                new-code (get qp "new-code")
-                new-code-fixture (some-> (get qp "new-code-fixture") parse-uuid)
-                participants (participant/list-by-event event-id)
-                all-fixtures (fixture/list-by-event event-id)
-                fixtures (fixture/filter-fixtures all-fixtures fixture-filters)
-                sport-configs (event-sport/list-by-event event-id)
-                venues (venue/list-by-event event-id)
-                teams (team/list-by-event event-id)
-                sports (event-detail-sports ev)
-                codes-by-fixture (into {}
-                                       (map (fn [f]
-                                              [(:fixture/id f)
-                                               (scode/list-by-fixture (:fixture/id f))]))
-                                       all-fixtures)]
-            (shared/html (views.events/event-detail ev participants fixtures sports
-                                                    {:fixture-filters fixture-filters
-                                                     :sport-configs sport-configs
-                                                     :venues venues
-                                                     :teams teams
-                                                     :codes-by-fixture codes-by-fixture
-                                                     :new-code new-code
-                                                     :new-code-fixture-id new-code-fixture}))))))))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            qp (or (:query-params request) {})
+            fixture-filters {:sport-code (get qp "sport")
+                             :team-name (get qp "team")
+                             :age-group (get qp "age-group")
+                             :venue (get qp "venue")
+                             :status (get qp "status")
+                             :date (get qp "date")}
+            new-code (get qp "new-code")
+            new-code-fixture (some-> (get qp "new-code-fixture") parse-uuid)
+            participants (participant/list-by-event event-id)
+            all-fixtures (fixture/list-by-event event-id)
+            fixtures (fixture/filter-fixtures all-fixtures fixture-filters)
+            sport-configs (event-sport/list-by-event event-id)
+            venues (venue/list-by-event event-id)
+            teams (team/list-by-event event-id)
+            sports (event-detail-sports ev)
+            codes-by-fixture (into {}
+                                   (map (fn [f]
+                                          [(:fixture/id f)
+                                           (scode/list-by-fixture (:fixture/id f))]))
+                                   all-fixtures)]
+        (shared/html (views.events/event-detail ev participants fixtures sports
+                                                {:fixture-filters fixture-filters
+                                                 :sport-configs sport-configs
+                                                 :venues venues
+                                                 :teams teams
+                                                 :codes-by-fixture codes-by-fixture
+                                                 :new-code new-code
+                                                 :new-code-fixture-id new-code-fixture}))))))
 
 (defn dashboard-page [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))]
-        (if-not event-id
-          (resp/not-found "Event not found")
-          (let [ev (event/find-by-id event-id)]
-            (if-not ev
-              (resp/not-found "Event not found")
-              (shared/html (views.events/event-dashboard ev (event-dashboard/dashboard-data event-id))))))))))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (shared/html (views.events/event-dashboard
+                    ev (event-dashboard/dashboard-data (:event/id ev)))))))
 
 (defn event-sport-config-save
   "POST /events/:id/sports/:sport/config — update per-sport overrides."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             sport-str (get-in request [:path-params :sport])
             sport-code (when sport-str (keyword "sport" sport-str))
             params (shared/form-params request)
             vm-raw (get params "validation-model")
             vm (when (seq vm-raw) (keyword vm-raw))]
-        (if-not (and event-id sport-code)
+        (if-not sport-code
           {:status 400 :body "Bad request"}
           (do
             (event-sport/configure! event-id sport-code
@@ -127,76 +118,62 @@
 (defn event-publish
   "POST /events/:id/publish — transition a draft event to published."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))]
-        (if-not event-id
-          {:status 404 :body "Event not found"}
-          (do
-            (event/publish! event-id (:user/firebase-uid current-user))
-            (resp/redirect (str "/events/" event-id))))))))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (event/publish! (:event/id ev) (:user/firebase-uid current-user))
+      (resp/redirect (str "/events/" (:event/id ev))))))
 
 (defn event-qr
   "GET /events/:id/qr — render an HTML page with the event QR code and details."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not ev
-          {:status 404 :body "Event not found"}
-          (let [spectator-url (str (shared/request->base-url request) "/e/" (:event/code ev))
-                png (event/qr-png-for-text spectator-url)
-                b64 (.encodeToString (java.util.Base64/getEncoder) png)
-                fmt (java.text.SimpleDateFormat. "d MMM yyyy")]
-            (shared/html
-             (views.events/event-qr-page ev spectator-url b64 fmt))))))))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [spectator-url (str (shared/request->base-url request) "/e/" (:event/code ev))
+            png (event/qr-png-for-text spectator-url)
+            b64 (.encodeToString (java.util.Base64/getEncoder) png)
+            fmt (java.text.SimpleDateFormat. "d MMM yyyy")]
+        (shared/html
+         (views.events/event-qr-page ev spectator-url b64 fmt))))))
 
 (defn participant-add
   "POST /events/:id/participants — add a participating school."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not ev
-          {:status 404 :body "Event not found"}
-          (let [params (shared/form-params request)
-                data {:participant/name (get params "participant-name" "")
-                      :participant/contact-email (get params "participant-email" "")
-                      :participant/contact-phone (get params "participant-phone" "")}
-                errors (participant/validate data)]
-            (if (seq errors)
-              (shared/html (views.events/event-detail ev
-                                                      (participant/list-by-event event-id)
-                                                      (fixture/list-by-event event-id)
-                                                      (event-detail-sports ev)
-                                                      {:errors errors
-                                                       :add-name (get params "participant-name")
-                                                       :add-email (get params "participant-email")
-                                                       :add-phone (get params "participant-phone")}))
-              (do
-                (participant/add-to-event! event-id
-                                           (:user/firebase-uid current-user)
-                                           data
-                                           nil)
-                (resp/redirect (str "/events/" event-id))))))))))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            params (shared/form-params request)
+            data {:participant/name (get params "participant-name" "")
+                  :participant/contact-email (get params "participant-email" "")
+                  :participant/contact-phone (get params "participant-phone" "")}
+            errors (participant/validate data)]
+        (if (seq errors)
+          (shared/html (views.events/event-detail ev
+                                                  (participant/list-by-event event-id)
+                                                  (fixture/list-by-event event-id)
+                                                  (event-detail-sports ev)
+                                                  {:errors errors
+                                                   :add-name (get params "participant-name")
+                                                   :add-email (get params "participant-email")
+                                                   :add-phone (get params "participant-phone")}))
+          (do
+            (participant/add-to-event! event-id
+                                       (:user/firebase-uid current-user)
+                                       data
+                                       nil)
+            (resp/redirect (str "/events/" event-id))))))))
 
 (defn participant-remove
   "POST /events/:id/participants/:pid/remove — remove a participating school."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [current-user user-or-redirect
-            event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [current-user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             participant-id (shared/parse-event-id (get-in request [:path-params :pid]))]
-        (when (and event-id participant-id)
+        (when participant-id
           (participant/remove-from-event! event-id participant-id
                                           (:user/firebase-uid current-user)))
         (resp/redirect (str "/events/" event-id))))))
@@ -204,29 +181,26 @@
 (defn team-create
   "POST /events/:id/teams — create a team label for this event."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not ev
-          {:status 404 :body "Event not found"}
-          (let [params (shared/form-params request)
-                data (team/parse-form params)
-                errors (team/validate data)]
-            (if (seq errors)
-              (resp/redirect (str "/events/" event-id))
-              (do
-                (team/create! event-id data)
-                (resp/redirect (str "/events/" event-id))))))))))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            params (shared/form-params request)
+            data (team/parse-form params)
+            errors (team/validate data)]
+        (if (seq errors)
+          (resp/redirect (str "/events/" event-id))
+          (do
+            (team/create! event-id data)
+            (resp/redirect (str "/events/" event-id))))))))
 
 (defn team-delete
   "POST /events/:id/teams/:tid/delete — retract a team."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             team-id (shared/parse-event-id (get-in request [:path-params :tid]))]
         (when team-id
           (try (team/delete! team-id)
@@ -236,29 +210,26 @@
 (defn venue-create
   "POST /events/:id/venues — create a venue for this event."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
-            ev (when event-id (event/find-by-id event-id))]
-        (if-not ev
-          {:status 404 :body "Event not found"}
-          (let [params (shared/form-params request)
-                data (venue/parse-form params)
-                errors (venue/validate data)]
-            (if (seq errors)
-              (resp/redirect (str "/events/" event-id))
-              (do
-                (venue/create! event-id data)
-                (resp/redirect (str "/events/" event-id))))))))))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            params (shared/form-params request)
+            data (venue/parse-form params)
+            errors (venue/validate data)]
+        (if (seq errors)
+          (resp/redirect (str "/events/" event-id))
+          (do
+            (venue/create! event-id data)
+            (resp/redirect (str "/events/" event-id))))))))
 
 (defn venue-delete
   "POST /events/:id/venues/:vid/delete — retract a venue."
   [request]
-  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
-    (if-not tenant-id
-      user-or-redirect
-      (let [event-id (shared/parse-event-id (get-in request [:path-params :id]))
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
             venue-id (shared/parse-event-id (get-in request [:path-params :vid]))]
         (when venue-id
           (try (venue/delete! venue-id)

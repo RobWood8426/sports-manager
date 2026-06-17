@@ -109,13 +109,13 @@
         (is (= 200 (:status resp)))
         (is (re-find #"valid email" (:body resp)))))))
 
-(deftest add-user-not-found-shows-error
-  (testing "email not in the system shows not-found message"
+(deftest add-user-not-found-creates-invite
+  (testing "email not in the system creates a pending invite and redirects"
     (let [tid (seed-tenant! "Not Found School")]
       (seed-user! "uid-nf" "nf@x.com" tid)
       (let [resp (POST "/users/add" "uid-nf" {"email" "nobody@x.com"} tid)]
-        (is (= 200 (:status resp)))
-        (is (re-find #"No account found" (:body resp)))))))
+        (is (= 302 (:status resp)))
+        (is (= "/users?invited=1" (get-in resp [:headers "Location"])))))))
 
 (deftest add-user-success-redirects
   (testing "adding an existing user redirects to /users and links them to the tenant"
