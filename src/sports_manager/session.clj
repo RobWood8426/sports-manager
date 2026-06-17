@@ -72,3 +72,18 @@
   "Remove the active tenant from the response session."
   [response]
   (update response :session dissoc :active-tenant-id))
+
+;; ---------------------------------------------------------------------------
+;; Language override (Ring session map)
+;; ---------------------------------------------------------------------------
+
+(defn lang-override
+  "Read the viewer's chosen language override from the Ring session, or nil.
+  When set, it takes precedence over any page/event default."
+  [request]
+  (get-in request [:session :lang]))
+
+(defn set-lang
+  "Assoc the chosen language code into the response session."
+  [response lang]
+  (assoc-in response [:session :lang] lang))

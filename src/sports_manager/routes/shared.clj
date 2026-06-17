@@ -5,14 +5,21 @@
             [ring.util.response :as resp]
             [sports-manager.auth :as auth]
             [sports-manager.event :as event]
+            [sports-manager.i18n :as i18n]
             [sports-manager.membership :as membership]
             [sports-manager.session :as session]))
 
 (defn html
-  "Build a 200 text/html response from a string body."
+  "Build a 200 text/html response from a string body.
+
+  Sends `Cache-Control: no-store` so the browser never serves a stale render.
+  These pages are session-dependent (the language override, signed-in user,
+  active tenant) — a cached copy would show the wrong language after a
+  language switch, or stale data after any session change."
   [body]
   (-> (resp/response body)
-      (resp/content-type "text/html; charset=utf-8")))
+      (resp/content-type "text/html; charset=utf-8")
+      (resp/header "Cache-Control" "no-store")))
 
 (defn json-body
   "Parse a JSON request body into a keyword-keyed map (nil on failure)."
@@ -43,6 +50,31 @@
   (when s
     (try (java.util.UUID/fromString s)
          (catch IllegalArgumentException _ nil))))
+
+(defn switch-lang
+  "POST /lang — set the viewer's language override in the session and redirect
+  back to where they were. Works for both admin and public visitors (no auth
+  required). Unsupported codes fall back to English via normalize-lang.
+
+  Seeds the response session from the incoming request session so the active
+  tenant and the anti-forgery token survive — returning a response whose
+  :session held only {:lang ...} would replace the whole session and drop them
+  (causing a CSRF 403 and loss of the tenant selection on the next request)."
+  [request]
+  (let [lang (i18n/normalize-lang (get (form-params request) "lang"))
+        back (or (get-in request [:headers "referer"]) "/")]
+    (-> (resp/redirect back :see-other)
+        (assoc :session (:session request))
+        (session/set-lang lang))))
+
+(defn current-lang
+  "Resolve the language for this request: the viewer's session override if set,
+  otherwise `default` (a supported code, falling back to English). Pass the
+  page/event default as `default` on event-scoped pages; admin chrome passes
+  none and gets English."
+  ([request] (current-lang request "en"))
+  ([request default]
+   (i18n/normalize-lang (or (session/lang-override request) default))))
 
 (defn require-tenant
   "Returns [user tenant-id membership] if request has an authenticated user with

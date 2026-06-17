@@ -16,15 +16,16 @@
 (defn spectator-landing
   "GET /e — public code-entry page, or redirect to event if ?code= is provided."
   [request]
-  (let [code (get (:query-params request) "code")]
+  (let [code (get (:query-params request) "code")
+        lang (shared/current-lang request)]
     (if (str/blank? code)
-      (shared/html (views.spectator/spectator-code-entry))
+      (shared/html (views.spectator/spectator-code-entry {:lang lang}))
       (let [ev (event/find-by-code code)]
         (cond
           (nil? ev)
-          (shared/html (views.spectator/spectator-code-entry {:error (str "No event found for code \"" code "\"")}))
+          (shared/html (views.spectator/spectator-code-entry {:lang lang :error (str "No event found for code \"" code "\"")}))
           (not= :event.status/published (:event/status ev))
-          (shared/html (views.spectator/spectator-code-entry {:error "This event is not yet published."}))
+          (shared/html (views.spectator/spectator-code-entry {:lang lang :error "This event is not yet published."}))
           :else
           (resp/redirect (str "/e/" (str/upper-case code))))))))
 
@@ -62,7 +63,8 @@
             tenant (school/find-by-id (:event/tenant ev))]
         (shared/html (views.spectator/spectator-event ev participants enriched
                                                       {:filters filters :sports sports
-                                                       :tenant tenant}))))))
+                                                       :tenant tenant
+                                                       :lang (shared/current-lang request (:event/language ev))}))))))
 
 (defn spectator-fixture-page
   "GET /e/fixture/:fid — public live score detail page for a single fixture."
@@ -76,10 +78,13 @@
             final (->> (final-score/find-by-fixture fid)
                        (filter #(= :final-score.status/accepted (:final-score/status %)))
                        first)
-            event-code (some-> (:fixture/event f) event/find-by-id :event/code)
+            ev (some-> (:fixture/event f) event/find-by-id)
+            event-code (:event/code ev)
             enriched (cond-> (assoc f :fixture/live-score live-score)
                        final (assoc :fixture/final-score-status (:final-score/status final)))]
-        (shared/html (views.spectator/spectator-fixture enriched {:event-code event-code}))))))
+        (shared/html (views.spectator/spectator-fixture enriched
+                                                        {:event-code event-code
+                                                         :lang (shared/current-lang request (:event/language ev))}))))))
 
 (defn spectator-fixture-score
   "GET /e/fixture/:fid/score — public JSON polling endpoint for live score."

@@ -2,89 +2,42 @@
   "Event detail / management page and standalone event QR page."
   (:require [clojure.string :as str]
             [hiccup2.core :as h]
-            [sports-manager.views.events.form :as form]
+            [sports-manager.i18n :as i18n]
+            [sports-manager.views.events.fixtures :as fixtures]
             [sports-manager.views.shared :as shared]))
-
-(defn- fixture-codes-section
-  "Renders the scorekeeper codes sub-section for one fixture."
-  [event-id fixture-id codes new-code new-code-fixture-id]
-  (let [show-new? (= fixture-id new-code-fixture-id)]
-    [:div.mt-3.space-y-2
-     (when show-new?
-       [:div.alert.alert-info.text-sm.p-3
-        [:strong "New code generated (shown once): "]
-        [:a.ss-mono.font-bold.link.link-primary {:href (str "/score?code=" new-code) :target "_blank"} new-code]
-        [:span.ml-2.opacity-70 "↗ opens scorer tab"]])
-     (when (seq codes)
-       [:ul.flex.flex-col.gap-1
-        (for [c codes]
-          [:li.flex.items-center.gap-2
-           (shared/scode-status-badge (:scode/status c))
-           [:a.text-sm.link.link-primary
-            {:href (str "/events/" event-id "/fixtures/" fixture-id "/codes/" (:scode/id c) "/qr")
-             :target "_blank"}
-            "QR"]
-           (when (= :scode.status/active (:scode/status c))
-             [:form {:method "post"
-                     :action (str "/events/" event-id
-                                  "/fixtures/" fixture-id
-                                  "/codes/" (:scode/id c) "/revoke")
-                     :class "inline"}
-              (shared/csrf-field)
-              [:button.btn.btn-outline.btn-xs {:type "submit"} "Revoke"]])])])
-     [:form {:method "post"
-             :action (str "/events/" event-id "/fixtures/" fixture-id "/codes")}
-      (shared/csrf-field)
-      [:button.btn.btn-xs.btn-outline {:type "submit"} "Generate code"]]]))
-
-(defn- fixture-row [event-id f codes new-code new-code-fixture-id]
-  (let [fixture-id (:fixture/id f)]
-    (list
-     [:tr {:id (str "fixture-" fixture-id)}
-      [:td [:strong (:fixture/match-number f)]]
-      [:td (get-in f [:fixture/sport-template :sport-template/name] "—")]
-      [:td (get-in f [:fixture/team-a :participant/name] "—")]
-      [:td (get-in f [:fixture/team-b :participant/name] "—")]
-      [:td (or (:fixture/age-group f) "—")]
-      [:td (or (:fixture/venue f) "—")]
-      [:td (when-let [s (:fixture/start-at f)]
-             (.format (java.text.SimpleDateFormat. "HH:mm") s))]
-      [:td (shared/fixture-status-badge (:fixture/status f))]]
-     [:tr {:style "background: transparent;"}
-      [:td.pb-3.pt-1 {:colspan "8"}
-       (fixture-codes-section event-id fixture-id codes new-code new-code-fixture-id)]])))
 
 (defn event-detail
   "Event detail / management page."
   [event participants fixtures sports
    & [{:keys [errors add-name add-email add-phone fixture-errors fixture-filters
-              sport-configs codes-by-fixture new-code new-code-fixture-id venues teams]
+              sport-configs codes-by-fixture new-code new-code-fixture-id venues teams lang]
        :or {errors {} fixture-errors {} fixture-filters {} sport-configs []
-            codes-by-fixture {} venues [] teams []}}]]
-  (let [fmt (java.text.SimpleDateFormat. "d MMM yyyy HH:mm")
+            codes-by-fixture {} venues [] teams [] lang "en"}}]]
+  (let [tr (fn [k] (i18n/t lang k))
+        fmt (java.text.SimpleDateFormat. "d MMM yyyy HH:mm")
         draft? (= :event.status/draft (:event/status event))
         event-id (:event/id event)
         event-code (:event/code event)
         filter-active? (some (fn [[_ v]] (not (str/blank? (str v)))) fixture-filters)
-        vm-labels {:validation.model/single "Single scorekeeper — accepted immediately"
-                   :validation.model/single-pending "Single scorekeeper — pending admin approval"
-                   :validation.model/dual "Two scorekeepers must match"
-                   :validation.model/admin-approval "Always requires admin approval"}
+        vm-labels {:validation.model/single (tr :detail/vm-single)
+                   :validation.model/single-pending (tr :detail/vm-single-pending)
+                   :validation.model/dual (tr :detail/vm-dual)
+                   :validation.model/admin-approval (tr :detail/vm-admin-approval)}
         vm-options (seq vm-labels)]
     (shared/doc (str (:event/name event) " — Sports Manager")
-                {:active :events}
+                {:active :events :lang lang}
                 [:div.flex.flex-wrap.items-center.justify-between.gap-y-3.mb-8.pb-6.border-b.border-base-300
                  [:nav.flex.flex-wrap.gap-2.text-sm.items-center
-                  [:a.opacity-60.hover:opacity-100.transition-opacity {:href "/"} "← Home"]
+                  [:a.opacity-60.hover:opacity-100.transition-opacity {:href "/"} (tr :detail/home)]
                   [:span.opacity-30 "/"]
                   [:strong (:event/name event)]]
                  [:div.flex.items-center.gap-2.flex-wrap
                   (shared/event-status-badge (:event/status event))
-                  [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/dashboard")} "Dashboard"]
+                  [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/dashboard")} (tr :detail/dashboard)]
                   (when draft?
                     [:form {:method "post" :action (str "/events/" event-id "/publish") :class "m-0"}
                      (shared/csrf-field)
-                     [:button.btn.btn-sm.btn-primary {:type "submit"} "Publish"]])]]
+                     [:button.btn.btn-sm.btn-primary {:type "submit"} (tr :detail/publish)]])]]
                 [:div.mb-8.flex.flex-col.gap-1
                  (when (:event/description event)
                    [:p.opacity-60.text-sm (:event/description event)])
@@ -95,14 +48,14 @@
                     (when-let [e (:event/end-at event)] (.format fmt e))])
                  (when event-code
                    [:p.text-sm.opacity-60
-                    "Code: "
+                    (tr :detail/code)
                     [:a.ss-mono.link.link-primary {:href (str "/e/" event-code) :target "_blank"} event-code]
                     " "
-                    [:a.link.link-primary {:href (str "/events/" event-id "/qr") :target "_blank"} "QR Code"]])]
+                    [:a.link.link-primary {:href (str "/events/" event-id "/qr") :target "_blank"} (tr :detail/qr-code)]])]
                 [:section.mb-8
                  (if (seq participants)
                    (shared/collapsible-list
-                    "Participating schools" (count participants)
+                    (tr :detail/participating-schools) (count participants)
                     [:div.flex.flex-col.gap-2.mb-4
                      (for [p participants]
                        [:div.flex.items-center.gap-3.ss-card.px-4.py-3
@@ -115,40 +68,40 @@
                         [:form {:method "post"
                                 :action (str "/events/" event-id "/participants/" (:participant/id p) "/remove")}
                          (shared/csrf-field)
-                         [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])])
+                         [:button.btn.btn-xs.btn-outline {:type "submit"} (tr :detail/remove)]]])])
                    [:div.mb-4
-                    [:h2.ss-label.block.mb-3 "Participating schools"]
-                    [:p.opacity-50 "No schools added yet."]])
+                    [:h2.ss-label.block.mb-3 (tr :detail/participating-schools)]
+                    [:p.opacity-50 (tr :detail/no-schools)]])
                  [:details.ss-card
-                  [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add participating school"]
+                  [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm (tr :detail/add-school)]
                   [:div.px-4.pb-4.pt-2
                    [:form {:method "post" :action (str "/events/" event-id "/participants")}
                     (shared/csrf-field)
                     [:div.flex.flex-wrap.gap-3.items-end
                      [:div.form-control
-                      [:label.label [:span.label-text "School name " [:span.text-error "*"]]]
+                      [:label.label [:span.label-text (tr :detail/school-name) " " [:span.text-error "*"]]]
                       [:input.input.input-bordered
                        {:id "participant-name" :name "participant-name" :type "text"
-                        :placeholder "e.g. Rondebosch Boys' High"
+                        :placeholder (tr :detail/school-name-placeholder)
                         :value (or add-name "")}]
                       (when-let [err (get errors :participant/name)]
                         [:label.label [:span.label-text-alt.text-error err]])]
                      [:div.form-control
-                      [:label.label [:span.label-text "Contact email"]]
+                      [:label.label [:span.label-text (tr :detail/contact-email)]]
                       [:input.input.input-bordered
                        {:id "participant-email" :name "participant-email" :type "email"
-                        :placeholder "coordinator@school.co.za"
+                        :placeholder (tr :detail/contact-email-placeholder)
                         :value (or add-email "")}]]
                      [:div.form-control
-                      [:label.label [:span.label-text "Contact phone"]]
+                      [:label.label [:span.label-text (tr :detail/contact-phone)]]
                       [:input.input.input-bordered
                        {:id "participant-phone" :name "participant-phone" :type "tel"
-                        :placeholder "+27 21 000 0000"
+                        :placeholder (tr :detail/contact-phone-placeholder)
                         :value (or add-phone "")}]]
-                     [:button.btn.btn-sm {:type "submit"} "Add school"]]]]]]
+                     [:button.btn.btn-sm {:type "submit"} (tr :detail/add-school-button)]]]]]]
                 (when (seq sport-configs)
                   [:section.mb-8
-                   [:h2.ss-label.block.mb-3 "Sport settings"]
+                   [:h2.ss-label.block.mb-3 (tr :detail/sport-settings)]
                    [:div.flex.flex-col.gap-2
                     (for [cfg sport-configs]
                       (let [sport-name (:sport-template/name cfg)
@@ -166,21 +119,21 @@
                               [:option {:value (str (namespace vm) "/" (name vm))
                                         :selected (= vm current-vm)}
                                label])]
-                           [:button.btn.btn-sm.btn-primary {:type "submit"} "Save"]]]]))]])
+                           [:button.btn.btn-sm.btn-primary {:type "submit"} (tr :detail/save)]]]]))]])
                 [:section.mb-8
                  (if (seq venues)
                    (shared/collapsible-list
-                    "Venues" (count venues)
+                    (tr :detail/venues) (count venues)
                     [:div.flex.flex-col.gap-2.mb-4
                      (for [v venues]
-                       (let [type-label (get {"venue.type/field" "Field"
-                                              "venue.type/court" "Court"
-                                              "venue.type/pool" "Pool"
-                                              "venue.type/track" "Track"
-                                              "venue.type/pitch" "Pitch"
-                                              "venue.type/astro" "Astroturf"
-                                              "venue.type/hall" "Hall"
-                                              "venue.type/other" "Other"}
+                       (let [type-label (get {"venue.type/field" (tr :detail/venue-field)
+                                              "venue.type/court" (tr :detail/venue-court)
+                                              "venue.type/pool" (tr :detail/venue-pool)
+                                              "venue.type/track" (tr :detail/venue-track)
+                                              "venue.type/pitch" (tr :detail/venue-pitch)
+                                              "venue.type/astro" (tr :detail/venue-astro)
+                                              "venue.type/hall" (tr :detail/venue-hall)
+                                              "venue.type/other" (tr :detail/venue-other)}
                                              (some-> v :venue/type name) "—")]
                          [:div.flex.items-center.gap-3.ss-card.px-4.py-3
                           [:span.font-semibold.flex-1 (:venue/name v)]
@@ -190,42 +143,42 @@
                           [:form {:method "post"
                                   :action (str "/events/" event-id "/venues/" (:venue/id v) "/delete")}
                            (shared/csrf-field)
-                           [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]]))])
+                           [:button.btn.btn-xs.btn-outline {:type "submit"} (tr :detail/remove)]]]))])
                    [:div.mb-4
-                    [:h2.ss-label.block.mb-3 "Venues"]
-                    [:p.opacity-50 "No venues added yet."]])
+                    [:h2.ss-label.block.mb-3 (tr :detail/venues)]
+                    [:p.opacity-50 (tr :detail/no-venues)]])
                  [:details.ss-card
-                  [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add venue"]
+                  [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm (tr :detail/add-venue)]
                   [:div.px-4.pb-4.pt-2
                    [:form {:method "post" :action (str "/events/" event-id "/venues")}
                     (shared/csrf-field)
                     [:div.flex.flex-wrap.gap-3.items-end
                      [:div.form-control
-                      [:label.label [:span.label-text "Name " [:span.text-error "*"]]]
+                      [:label.label [:span.label-text (tr :detail/venue-name) " " [:span.text-error "*"]]]
                       [:input.input.input-bordered
-                       {:id "venue-name" :name "venue-name" :type "text" :placeholder "e.g. Main Field"}]]
+                       {:id "venue-name" :name "venue-name" :type "text" :placeholder (tr :detail/venue-name-placeholder)}]]
                      [:div.form-control
-                      [:label.label [:span.label-text "Type " [:span.text-error "*"]]]
+                      [:label.label [:span.label-text (tr :detail/venue-type) " " [:span.text-error "*"]]]
                       [:select.select.select-bordered {:id "venue-type" :name "venue-type"}
-                       [:option {:value "" :disabled true :selected true} "Select…"]
-                       [:option {:value "venue.type/field"} "Field"]
-                       [:option {:value "venue.type/court"} "Court"]
-                       [:option {:value "venue.type/pool"} "Pool"]
-                       [:option {:value "venue.type/track"} "Track"]
-                       [:option {:value "venue.type/pitch"} "Pitch"]
-                       [:option {:value "venue.type/astro"} "Astroturf"]
-                       [:option {:value "venue.type/hall"} "Hall"]
-                       [:option {:value "venue.type/other"} "Other"]]]
+                       [:option {:value "" :disabled true :selected true} (tr :detail/select)]
+                       [:option {:value "venue.type/field"} (tr :detail/venue-field)]
+                       [:option {:value "venue.type/court"} (tr :detail/venue-court)]
+                       [:option {:value "venue.type/pool"} (tr :detail/venue-pool)]
+                       [:option {:value "venue.type/track"} (tr :detail/venue-track)]
+                       [:option {:value "venue.type/pitch"} (tr :detail/venue-pitch)]
+                       [:option {:value "venue.type/astro"} (tr :detail/venue-astro)]
+                       [:option {:value "venue.type/hall"} (tr :detail/venue-hall)]
+                       [:option {:value "venue.type/other"} (tr :detail/venue-other)]]]
                      [:div.form-control
-                      [:label.label [:span.label-text "Display order"]]
+                      [:label.label [:span.label-text (tr :detail/display-order)]]
                       [:input.input.input-bordered.w-24
                        {:id "venue-order" :name "venue-order" :type "number" :placeholder "1"}]]
-                     [:button.btn.btn-sm {:type "submit"} "Add venue"]]]]]]
+                     [:button.btn.btn-sm {:type "submit"} (tr :detail/add-venue-button)]]]]]]
                 (when (seq participants)
                   [:section.mb-8
                    (if (seq teams)
                      (shared/collapsible-list
-                      "Teams" (count teams)
+                      (tr :detail/teams) (count teams)
                       [:div.flex.flex-col.gap-2.mb-4
                        (for [t teams]
                          [:div.flex.items-center.gap-3.ss-card.px-4.py-3
@@ -236,162 +189,110 @@
                             [:span.badge.badge-sm.badge-outline ag])
                           (when-let [g (:team/gender t)]
                             [:span.badge.badge-sm.badge-outline
-                             (get {:team.gender/boys "Boys"
-                                   :team.gender/girls "Girls"
-                                   :team.gender/mixed "Mixed"} g)])
+                             (get {:team.gender/boys (tr :detail/boys)
+                                   :team.gender/girls (tr :detail/girls)
+                                   :team.gender/mixed (tr :detail/mixed)} g)])
                           [:form {:method "post"
                                   :action (str "/events/" event-id "/teams/" (:team/id t) "/delete")}
                            (shared/csrf-field)
-                           [:button.btn.btn-xs.btn-outline {:type "submit"} "Remove"]]])])
+                           [:button.btn.btn-xs.btn-outline {:type "submit"} (tr :detail/remove)]]])])
                      [:div.mb-4
-                      [:h2.ss-label.block.mb-3 "Teams"]
-                      [:p.opacity-50 "No teams added yet."]])
+                      [:h2.ss-label.block.mb-3 (tr :detail/teams)]
+                      [:p.opacity-50 (tr :detail/no-teams)]])
                    [:details.ss-card
-                    [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add team"]
+                    [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm (tr :detail/add-team)]
                     [:div.px-4.pb-4.pt-2
                      [:form {:method "post" :action (str "/events/" event-id "/teams")}
                       (shared/csrf-field)
                       [:div.flex.flex-wrap.gap-3.items-end
                        [:div.form-control
-                        [:label.label [:span.label-text "Team name " [:span.text-error "*"]]]
+                        [:label.label [:span.label-text (tr :detail/team-name) " " [:span.text-error "*"]]]
                         [:input.input.input-bordered
                          {:id "team-name" :name "team-name" :type "text"
-                          :placeholder "e.g. Rondebosch U16 Boys"}]]
+                          :placeholder (tr :detail/team-name-placeholder)}]]
                        [:div.form-control
-                        [:label.label [:span.label-text "School " [:span.text-error "*"]]]
+                        [:label.label [:span.label-text (tr :detail/school) " " [:span.text-error "*"]]]
                         [:select.select.select-bordered {:id "team-participant" :name "team-participant"}
-                         [:option {:value "" :disabled true :selected true} "Select…"]
+                         [:option {:value "" :disabled true :selected true} (tr :detail/select)]
                          (for [p (sort-by :participant/name participants)]
                            [:option {:value (str (:participant/id p))} (:participant/name p)])]]
                        [:div.form-control
-                        [:label.label [:span.label-text "Sport " [:span.text-error "*"]]]
+                        [:label.label [:span.label-text (tr :detail/sport) " " [:span.text-error "*"]]]
                         [:select.select.select-bordered {:id "team-sport" :name "team-sport"}
-                         [:option {:value "" :disabled true :selected true} "Select…"]
+                         [:option {:value "" :disabled true :selected true} (tr :detail/select)]
                          (for [s (sort-by :sport-template/name sports)]
                            [:option {:value (name (:sport-template/code s))} (:sport-template/name s)])]]
                        [:div.form-control
-                        [:label.label [:span.label-text "Age group"]]
+                        [:label.label [:span.label-text (tr :detail/age-group)]]
                         [:input.input.input-bordered
                          {:id "team-age-group" :name "team-age-group" :type "text"
-                          :placeholder "e.g. U16"}]]
+                          :placeholder (tr :detail/age-group-placeholder)}]]
                        [:div.form-control
-                        [:label.label [:span.label-text "Category"]]
+                        [:label.label [:span.label-text (tr :detail/category)]]
                         [:select.select.select-bordered {:id "team-gender" :name "team-gender"}
-                         [:option {:value ""} "Not specified"]
-                         [:option {:value "team.gender/boys"} "Boys"]
-                         [:option {:value "team.gender/girls"} "Girls"]
-                         [:option {:value "team.gender/mixed"} "Mixed"]]]
-                       [:button.btn.btn-sm {:type "submit"} "Add team"]]]]]])
+                         [:option {:value ""} (tr :detail/not-specified)]
+                         [:option {:value "team.gender/boys"} (tr :detail/boys)]
+                         [:option {:value "team.gender/girls"} (tr :detail/girls)]
+                         [:option {:value "team.gender/mixed"} (tr :detail/mixed)]]]
+                       [:button.btn.btn-sm {:type "submit"} (tr :detail/add-team-button)]]]]]])
                 [:section {:id "fixtures-section"}
                  [:div.flex.items-center.justify-between.gap-3.mb-3.flex-wrap
-                  [:h2.ss-label.m-0 "Fixtures"]
+                  [:h2.ss-label.m-0 (tr :detail/fixtures)]
                   [:div.flex.items-center.gap-2.flex-wrap
                    (when (seq fixtures)
                      (list
-                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/fixtures/export")} "Export fixtures"]
-                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/results/export")} "Export results"]
-                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/score-audit/export")} "Export score audit"]))
+                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/fixtures/export")} (tr :detail/export-fixtures)]
+                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/results/export")} (tr :detail/export-results)]
+                      [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/score-audit/export")} (tr :detail/export-score-audit)]))
                    (when (seq participants)
-                     [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/import")} "Import CSV"])]]
+                     [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id "/import")} (tr :detail/import-csv)])]]
                  [:details.ss-card.mb-4
                   [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm
-                   "Filters" (when filter-active? " (active)")]
+                   (tr :detail/filters) (when filter-active? (str " " (tr :detail/active)))]
                   [:div.px-4.pb-4.pt-2
                    [:form {:method "get" :action (str "/events/" event-id)}
                     [:div.flex.flex-wrap.gap-3.items-end
                      [:div.form-control
-                      [:label.label [:span.label-text "Sport"]]
+                      [:label.label [:span.label-text (tr :detail/sport)]]
                       [:select.select.select-bordered {:id "filter-sport" :name "sport"}
-                       [:option {:value ""} "All sports"]
+                       [:option {:value ""} (tr :detail/all-sports)]
                        (for [s (sort-by :sport-template/name sports)]
                          [:option {:value (name (:sport-template/code s))
                                    :selected (= (name (:sport-template/code s))
                                                 (str (:sport-code fixture-filters)))}
                           (:sport-template/name s)])]]
                      [:div.form-control
-                      [:label.label [:span.label-text "Team / school"]]
+                      [:label.label [:span.label-text (tr :detail/team-school)]]
                       [:input.input.input-bordered
                        {:id "filter-team" :name "team" :type "text"
-                        :placeholder "Search team…"
+                        :placeholder (tr :detail/search-team)
                         :value (or (:team-name fixture-filters) "")}]]
                      [:div.form-control
-                      [:label.label [:span.label-text "Age group"]]
+                      [:label.label [:span.label-text (tr :detail/age-group)]]
                       [:input.input.input-bordered
                        {:id "filter-age-group" :name "age-group" :type "text"
-                        :placeholder "e.g. U16"
+                        :placeholder (tr :detail/age-group-placeholder)
                         :value (or (:age-group fixture-filters) "")}]]
                      [:div.form-control
-                      [:label.label [:span.label-text "Venue"]]
+                      [:label.label [:span.label-text (tr :detail/venue)]]
                       [:input.input.input-bordered
                        {:id "filter-venue" :name "venue" :type "text"
-                        :placeholder "Search venue…"
+                        :placeholder (tr :detail/search-venue)
                         :value (or (:venue fixture-filters) "")}]]
                      [:div.form-control
-                      [:label.label [:span.label-text "Date"]]
+                      [:label.label [:span.label-text (tr :detail/date)]]
                       [:input.input.input-bordered
                        {:id "filter-date" :name "date" :type "date"
                         :value (or (:date fixture-filters) "")}]]
                      [:div.flex.gap-2
-                      [:button.btn.btn-sm {:type "submit"} "Filter"]
+                      [:button.btn.btn-sm {:type "submit"} (tr :detail/filter)]
                       (when filter-active?
-                        [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id)} "Clear"])]]]]]
-                 (if (seq fixtures)
-                   [:table.table.table-zebra.w-full.mb-4
-                    [:thead [:tr [:th "#"] [:th "Sport"] [:th "Team A"] [:th "Team B"]
-                             [:th "Age group"] [:th "Venue"] [:th "Time"] [:th "Status"]]]
-                    [:tbody
-                     (map (fn [f]
-                            (fixture-row event-id f
-                                         (get codes-by-fixture (:fixture/id f) [])
-                                         new-code new-code-fixture-id))
-                          fixtures)]]
-                   [:p.opacity-50.mb-4
-                    (if filter-active? "No fixtures match the current filters." "No fixtures yet.")])
-                 (when (seq participants)
-                   [:details.ss-card
-                    [:summary.px-4.py-3.cursor-pointer.font-medium.text-sm "Add fixture"]
-                    [:div.px-4.pb-4.pt-2
-                     [:form {:method "post" :action (str "/events/" event-id "/fixtures")}
-                      (shared/csrf-field)
-                      [:div.flex.flex-wrap.gap-3.items-end
-                       [:div.form-control
-                        [:label.label [:span.label-text "Sport " [:span.text-error "*"]]]
-                        [:select.select.select-bordered {:id "fixture-sport" :name "fixture-sport"}
-                         [:option {:value "" :disabled true :selected true} "Select…"]
-                         (for [s (sort-by :sport-template/name sports)]
-                           [:option {:value (name (:sport-template/code s))}
-                            (:sport-template/name s)])]
-                        (when-let [err (get fixture-errors :fixture/sport-code)]
-                          [:label.label [:span.label-text-alt.text-error err]])]
-                       [:div.form-control
-                        [:label.label [:span.label-text "Team A " [:span.text-error "*"]]]
-                        [:select.select.select-bordered {:id "fixture-team-a" :name "fixture-team-a"}
-                         [:option {:value "" :disabled true :selected true} "Select…"]
-                         (for [p (sort-by :participant/name participants)]
-                           [:option {:value (str (:participant/id p))} (:participant/name p)])]
-                        (when-let [err (get fixture-errors :fixture/team-a-id)]
-                          [:label.label [:span.label-text-alt.text-error err]])]
-                       [:div.form-control
-                        [:label.label [:span.label-text "Team B " [:span.text-error "*"]]]
-                        [:select.select.select-bordered {:id "fixture-team-b" :name "fixture-team-b"}
-                         [:option {:value "" :disabled true :selected true} "Select…"]
-                         (for [p (sort-by :participant/name participants)]
-                           [:option {:value (str (:participant/id p))} (:participant/name p)])]
-                        (when-let [err (get fixture-errors :fixture/team-b-id)]
-                          [:label.label [:span.label-text-alt.text-error err]])]
-                       [:div.form-control
-                        [:label.label [:span.label-text "Age group"]]
-                        [:input.input.input-bordered
-                         {:id "fixture-age-group" :name "fixture-age-group" :type "text"
-                          :placeholder "e.g. U16 Boys"}]]
-                       [:div.form-control
-                        [:label.label [:span.label-text "Venue"]]
-                        [:select.select.select-bordered {:id "fixture-venue-ref" :name "fixture-venue-ref"}
-                         [:option {:value ""} "— none —"]
-                         (for [v venues]
-                           [:option {:value (str (:venue/id v))} (:venue/name v)])]]
-                       (form/datetime-field fixture-errors :fixture/start-at "fixture-start-at" "Start" nil)
-                       (form/datetime-field fixture-errors :fixture/end-at "fixture-end-at" "End" nil)
-                       [:button.btn.btn-sm {:type "submit"} "Add fixture"]]]]])]
+                        [:a.btn.btn-sm.btn-outline {:href (str "/events/" event-id)} (tr :detail/clear)])]]]]]
+                 [:div.flex.flex-col.lg:flex-row.gap-4.items-start
+                  [:div.lg:w-80.lg:shrink-0.w-full
+                   (fixtures/add-fixture-form event-id participants sports venues fixture-errors lang)]
+                  [:div.flex-1.min-w-0.w-full
+                   (fixtures/fixtures-grid event-id fixtures filter-active?
+                                           codes-by-fixture new-code new-code-fixture-id lang)]]]
                 (when filter-active?
                   [:script (h/raw "document.getElementById('fixtures-section').scrollIntoView({behavior:'instant'});")]))))

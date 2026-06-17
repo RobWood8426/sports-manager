@@ -45,14 +45,14 @@
         (let [user (auth/find-user uid)
               tenant-name (:tenant/name (school/find-by-id active-tid))]
           (shared/html (views.admin/home user (event/list-by-tenant active-tid) memberships active-tid
-                                         {:tenant-name tenant-name})))
+                                         {:tenant-name tenant-name :lang (shared/current-lang request)})))
 
         (= 1 (count memberships))
         (let [tid (:membership/tenant (first memberships))
               user (auth/find-user uid)
               tenant-name (:tenant/name (school/find-by-id tid))]
           (-> (shared/html (views.admin/home user (event/list-by-tenant tid) memberships tid
-                                             {:tenant-name tenant-name}))
+                                             {:tenant-name tenant-name :lang (shared/current-lang request)}))
               (session/set-active-tenant tid)))
 
         :else
@@ -62,7 +62,7 @@
 (defn school-setup-page [request]
   (if-let [uid (:uid request)]
     (let [email (:user/email (auth/find-user uid))]
-      (shared/html (views.auth/school-setup {:email email})))
+      (shared/html (views.auth/school-setup {:email email :lang (shared/current-lang request)})))
     (resp/redirect "/login")))
 
 (defn school-setup-submit
@@ -74,7 +74,7 @@
       (let [profile (parse-profile (shared/form-params request))
             errors (school/validate profile)]
         (if (seq errors)
-          (shared/html (views.auth/school-setup {:errors errors}))
+          (shared/html (views.auth/school-setup {:errors errors :lang (shared/current-lang request)}))
           (do
             (school/create! uid profile)
             (resp/redirect "/")))))))
@@ -108,7 +108,7 @@
                                           (school/find-by-id (:membership/tenant m))))))]
       (if (empty? memberships)
         (resp/redirect "/school/setup")
-        (shared/html (views.auth/select-tenant memberships))))
+        (shared/html (views.auth/select-tenant memberships {:lang (shared/current-lang request)}))))
     (resp/redirect "/login")))
 
 (defn select-tenant-submit

@@ -14,7 +14,8 @@
   (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
     (if-not tenant-id
       user-or-redirect
-      (shared/html (views.admin/school-settings (school/find-by-id tenant-id))))))
+      (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
+                                                {:lang (shared/current-lang request)})))))
 
 (defn profile-submit
   "POST /school/settings — save profile fields and brand colours."
@@ -32,7 +33,7 @@
         (if (seq errors)
           (shared/html (views.admin/school-settings
                         (merge (school/find-by-id tenant-id) profile)
-                        {:errors errors}))
+                        {:errors errors :lang (shared/current-lang request)}))
           (do
             (school/update-profile! tenant-id profile)
             (school/set-colours! tenant-id {:primary (get params "brand-primary")
@@ -52,11 +53,13 @@
         (cond
           (or (nil? file-part) (str/blank? (:filename file-part "")))
           (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
-                                                    {:errors {:file "Please choose an image."}}))
+                                                    {:errors {:file "Please choose an image."}
+                                                     :lang (shared/current-lang request)}))
 
           (seq errors)
           (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
-                                                    {:errors errors}))
+                                                    {:errors errors
+                                                     :lang (shared/current-lang request)}))
 
           :else
           (let [tenant (school/find-by-id tenant-id)

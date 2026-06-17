@@ -19,7 +19,8 @@
                                              (user/list-by-tenant tenant-id)
                                              (keys rbac/role-permissions)
                                              {:pending-invites (invite/find-pending-by-tenant tenant-id)
-                                              :invited? invited?}))))))
+                                              :invited? invited?
+                                              :lang (shared/current-lang request)}))))))
 
 (defn users-add
   "POST /users/add — add an existing user by email to this tenant."
@@ -28,13 +29,14 @@
     (if-not tenant-id
       user-or-redirect
       (let [current-user user-or-redirect
+            lang (shared/current-lang request)
             email (get (shared/form-params request) "email")
             errors (user/validate-add {:email email})]
         (if (seq errors)
           (shared/html (views.admin/users-list current-user
                                                (user/list-by-tenant tenant-id)
                                                (keys rbac/role-permissions)
-                                               {:add-errors errors :add-email email}))
+                                               {:add-errors errors :add-email email :lang lang}))
           (let [found (user/find-by-email email)
                 actor-uid (:user/firebase-uid current-user)]
             (if found
@@ -47,7 +49,8 @@
                                                          (user/list-by-tenant tenant-id)
                                                          (keys rbac/role-permissions)
                                                          {:add-errors {:other-tenant (str email " belongs to a different organisation and cannot be added.")}
-                                                          :add-email email}))
+                                                          :add-email email
+                                                          :lang lang}))
                     (throw e))))
               (do
                 (invite/create! email tenant-id actor-uid)

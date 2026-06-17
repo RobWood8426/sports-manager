@@ -22,25 +22,27 @@
   "GET /score — public code-entry page for scorekeepers."
   [request]
   (let [prefill (get (:query-params request) "code")]
-    (shared/html (views.scorekeeper/scorekeeper-code-entry {:prefill prefill}))))
+    (shared/html (views.scorekeeper/scorekeeper-code-entry
+                  {:prefill prefill :lang (shared/current-lang request)}))))
 
 (defn scorekeeper-code-submit
   "POST /score — verify the entered code; show confirmation page on success."
   [request]
   (let [code (str/trim (str/upper-case (get (shared/form-params request) "code" "")))
+        lang (shared/current-lang request)
         ip (or (get-in request [:headers "x-forwarded-for"])
                (:remote-addr request)
                "unknown")]
     (if (str/blank? code)
-      (shared/html (views.scorekeeper/scorekeeper-code-entry {:error "Please enter a code."}))
+      (shared/html (views.scorekeeper/scorekeeper-code-entry {:lang lang :error "Please enter a code."}))
       (try
         (let [sc (scode/find-active-by-plaintext code ip)]
           (if sc
             (let [fixture (scode/find-fixture-by-code (:scode/id sc))]
               (if fixture
-                (shared/html (views.scorekeeper/scorekeeper-confirm fixture (:scode/id sc)))
-                (shared/html (views.scorekeeper/scorekeeper-code-entry {:error "This code is no longer valid."}))))
-            (shared/html (views.scorekeeper/scorekeeper-code-entry {:error "Invalid or expired code. Please check and try again."}))))
+                (shared/html (views.scorekeeper/scorekeeper-confirm fixture (:scode/id sc) {:lang lang}))
+                (shared/html (views.scorekeeper/scorekeeper-code-entry {:lang lang :error "This code is no longer valid."}))))
+            (shared/html (views.scorekeeper/scorekeeper-code-entry {:lang lang :error "Invalid or expired code. Please check and try again."}))))
         (catch clojure.lang.ExceptionInfo e
           (if (= :rate-limited (:type (ex-data e)))
             {:status 429 :body "Too many attempts. Please wait 15 minutes and try again."}
@@ -56,24 +58,26 @@
       (let [fixture (scode/find-fixture-by-code scode-id)]
         (if (and fixture (= fixture-id (:fixture/id fixture)))
           (resp/redirect (str "/score/" fixture-id "/live?scode=" scode-id))
-          (shared/html (views.scorekeeper/scorekeeper-code-entry {:error "Code does not match this fixture."})))))))
+          (shared/html (views.scorekeeper/scorekeeper-code-entry
+                        {:lang (shared/current-lang request) :error "Code does not match this fixture."})))))))
 
 (defn scorekeeper-live-page
   "GET /score/:fixture-id/live — main scoring page. Marks the code as accessed on first load."
   [request]
   (let [fixture-id (shared/parse-event-id (get-in request [:path-params :fixture-id]))
         scode-id (shared/parse-event-id (get-in request [:query-params "scode"]))
-        current-period (get-in request [:query-params "period"])]
+        current-period (get-in request [:query-params "period"])
+        lang (shared/current-lang request)]
     (if-not (and fixture-id scode-id)
       {:status 400 :body "Bad request"}
       (let [fixture (scode/find-fixture-by-code scode-id)]
         (if-not (and fixture (= fixture-id (:fixture/id fixture)))
-          (shared/html (views.scorekeeper/scorekeeper-code-entry {:error "Code does not match this fixture."}))
+          (shared/html (views.scorekeeper/scorekeeper-code-entry {:lang lang :error "Code does not match this fixture."}))
           (do
             (try (scode/mark-accessed! scode-id) (catch Exception _))
             (let [current-score (score/current-score fixture-id)
                   period-labels (period-labels-for-fixture fixture)]
-              (shared/html (views.scorekeeper/scorekeeper-live fixture scode-id current-score period-labels current-period)))))))))
+              (shared/html (views.scorekeeper/scorekeeper-live fixture scode-id current-score period-labels current-period {:lang lang})))))))))
 
 (defn scorekeeper-start-game
   "POST /score/:fixture-id/start — scorekeeper begins scoring."
@@ -90,14 +94,15 @@
   "POST /score/:fixture-id/submit — record final score and show confirmation."
   [request]
   (let [fixture-id (shared/parse-event-id (get-in request [:path-params :fixture-id]))
-        scode-id (shared/parse-event-id (get (shared/form-params request) "scode-id"))]
+        scode-id (shared/parse-event-id (get (shared/form-params request) "scode-id"))
+        lang (shared/current-lang request)]
     (if-not (and fixture-id scode-id)
       {:status 400 :body "Bad request"}
       (try
         (let [fs (final-score/submit! fixture-id scode-id nil)]
-          (shared/html (views.scorekeeper/scorekeeper-submitted fs)))
+          (shared/html (views.scorekeeper/scorekeeper-submitted fs {:lang lang})))
         (catch clojure.lang.ExceptionInfo e
-          (shared/html (views.scorekeeper/scorekeeper-code-entry {:error (ex-message e)})))))))
+          (shared/html (views.scorekeeper/scorekeeper-code-entry {:lang lang :error (ex-message e)})))))))
 
 (defn scorekeeper-record-event
   "POST /score/:fixture-id/event — record a score delta. Returns JSON."

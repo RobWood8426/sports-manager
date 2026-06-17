@@ -1,21 +1,42 @@
 (ns sports-manager.views.shared
   "Shared layout helpers and UI fragments used across all view namespaces."
   (:require [hiccup2.core :as h]
-            [ring.middleware.anti-forgery :refer [*anti-forgery-token*]]))
+            [ring.middleware.anti-forgery :refer [*anti-forgery-token*]]
+            [sports-manager.i18n :as i18n]))
 
 (defn csrf-field
-  "Hidden input carrying the CSRF token. Include once inside every POST form."
+  "Hidden input carrying the CSRF token. Include once inside every POST form.
+
+  Falls back to an empty value when `*anti-forgery-token*` is unbound — this
+  happens when a page is rendered outside a request (e.g. the static CSRF-error
+  response built at startup), where rendering the literal unbound-var string
+  would be wrong. Such pages have no valid token anyway."
   []
-  [:input {:type "hidden" :name "__anti-forgery-token" :value *anti-forgery-token*}])
+  [:input {:type "hidden" :name "__anti-forgery-token"
+           :value (if (bound? #'*anti-forgery-token*) *anti-forgery-token* "")}])
 
 (def ^:private nav-items
-  "Persistent admin global-nav: [active-key label href]."
-  [[:events "Events" "/"]
-   [:users "Manage users" "/users"]
-   [:sports "Sports" "/school/sports"]
-   [:settings "Settings" "/school/settings"]
-   [:disputes "Disputes" "/disputes"]
-   [:audit "Audit log" "/audit"]])
+  "Persistent admin global-nav: [active-key i18n-key href]. Labels are resolved
+  per-request via `i18n/t` so the nav follows the viewer's language."
+  [[:events :nav/events "/"]
+   [:users :nav/users "/users"]
+   [:sports :nav/sports "/school/sports"]
+   [:settings :nav/settings "/school/settings"]
+   [:disputes :nav/disputes "/disputes"]
+   [:audit :nav/audit "/audit"]])
+
+(defn lang-switcher
+  "A compact language picker: a select that POSTs to /lang and reloads the page
+  in the chosen language. `lang` is the currently-active code."
+  [lang]
+  [:form.inline {:method "post" :action "/lang"}
+   (csrf-field)
+   [:select.select.select-xs.select-bordered
+    {:name "lang" :aria-label (i18n/t lang :lang/label)
+     :onchange "this.form.submit()"}
+    (for [code i18n/supported]
+      [:option (cond-> {:value code} (= code lang) (assoc :selected true))
+       (get i18n/lang-names code code)])]])
 
 (defn- brand
   "SchoolScore logo lockup (design-system `Logo`): the scoreboard mark + the
@@ -44,28 +65,31 @@
   user + Sign out on the right. `active` is a nav key (see `nav-items`); when nil
   the nav is omitted (used by pages like org-selection that have no tenant
   context yet)."
-  [{:keys [user active nav-count]}]
+  [{:keys [user active nav-count lang] :or {lang "en"}}]
   [:header.sticky.top-0.z-10.flex.flex-wrap.items-center.justify-between.gap-y-2
    {:style "padding:0.75rem 1.75rem;border-bottom:1px solid var(--color-base-300);background:var(--color-base-100)"}
    [:div.flex.items-center.gap-7.flex-wrap
     (brand 24)
     (when active
       [:nav.flex.flex-wrap.gap-x-5.gap-y-1.text-sm
-       (for [[k label href] nav-items]
+       (for [[k label-key href] nav-items]
          [:a.transition-colors
           {:href href
            :style (if (= k active)
                     "color:var(--text-strong);font-weight:600"
                     "color:var(--text-muted);font-weight:400")}
-          label])
+          (i18n/t lang label-key)])
        (when (and nav-count (> nav-count 1))
-         [:a.transition-colors {:href "/select-tenant" :style "color:var(--text-muted)"} "Switch org"])])]
-   (when user
-     [:div.flex.items-center.gap-4
-      [:span.text-sm {:style "color:var(--text-subtle)"} (or (:user/name user) (:user/email user))]
-      [:form {:method "post" :action "/auth/logout"}
-       (csrf-field)
-       [:button.btn.btn-sm.btn-ghost {:type "submit"} "Sign out"]]])])
+         [:a.transition-colors {:href "/select-tenant" :style "color:var(--text-muted)"}
+          (i18n/t lang :nav/switch-org)])])]
+   [:div.flex.items-center.gap-4
+    (lang-switcher lang)
+    (when user
+      (list
+       [:span.text-sm {:style "color:var(--text-subtle)"} (or (:user/name user) (:user/email user))]
+       [:form {:method "post" :action "/auth/logout"}
+        (csrf-field)
+        [:button.btn.btn-sm.btn-ghost {:type "submit"} (i18n/t lang :nav/sign-out)]]))]])
 
 (defn doc
   "Wrap body hiccup in a full HTML document with DaisyUI + HTMX loaded.
@@ -75,14 +99,18 @@
     :active    active global-nav key (see `nav-items`); omit to hide the nav
     :nav-count membership count (>1 shows the Switch org link)
   When no options map is supplied, a plain brand-only header is rendered (e.g.
-  the error page)."
+  the error page).
+
+  :lang sets the document language (and drives nav/header translation); it is
+  threaded in from the request's resolved language and defaults to English."
   [title & args]
   (let [opts (when (map? (first args)) (first args))
-        body (if opts (rest args) args)]
+        body (if opts (rest args) args)
+        lang (i18n/normalize-lang (:lang opts))]
     (str
      "<!DOCTYPE html>"
      (h/html
-      [:html {:lang "en" :data-theme "dark"}
+      [:html {:lang lang :data-theme "dark"}
        [:head
         [:meta {:charset "utf-8"}]
         [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
@@ -109,17 +137,21 @@
   With no options map the page is chrome-free (the bare code-entry screens).
 
   The brand link points at a public destination (the event landing when a code
-  is known, otherwise the code-entry page) — never an authed route like \"/\"."
+  is known, otherwise the code-entry page) — never an authed route like \"/\".
+
+  :lang sets the document language and is threaded in from the request's
+  resolved language (event default or visitor override); defaults to English."
   [title & args]
   (let [opts (when (map? (first args)) (first args))
         body (if opts (rest args) args)
         {:keys [code]} opts
+        lang (i18n/normalize-lang (:lang opts))
         show-header? (boolean (or code (:brand? opts)))
         brand-href (if code (str "/e/" code) "/e")]
     (str
      "<!DOCTYPE html>"
      (h/html
-      [:html {:lang "en" :data-theme "dark"}
+      [:html {:lang lang :data-theme "dark"}
        [:head
         [:meta {:charset "utf-8"}]
         [:meta {:name "viewport" :content "width=device-width, initial-scale=1"}]
@@ -136,9 +168,11 @@
           [:header.flex.items-center.justify-between
            {:style "padding:0.875rem 1.25rem;border-bottom:1px solid var(--color-base-300);background:var(--color-base-100)"}
            (brand 22 brand-href)
-           (when code
-             [:span.ss-mono {:style "font-size:var(--text-xs, 0.75rem);color:var(--text-subtle)"}
-              (str "code · " code)])])
+           [:div.flex.items-center.gap-3
+            (when code
+              [:span.ss-mono {:style "font-size:var(--text-xs, 0.75rem);color:var(--text-subtle)"}
+               (str "code · " code)])
+            (lang-switcher lang)]])
         (into [:main.p-6.max-w-xl.mx-auto] body)]]))))
 
 (defn field
@@ -320,4 +354,4 @@
         [:h2.text-4xl.font-bold.mb-4 (str status)]
         [:p.opacity-60 message]
         [:div.mt-6
-         [:a.btn {:href "/"} "Go home"]]]))
+         [:a.btn {:href "/"} (i18n/t "en" :error/go-home)]]]))

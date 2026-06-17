@@ -17,6 +17,7 @@
             [sports-manager.routes.auth :as auth]
             [sports-manager.routes.public.scorekeeper :as pub.scorekeeper]
             [sports-manager.routes.public.spectator :as pub.spectator]
+            [sports-manager.routes.shared :as routes.shared]
             [sports-manager.session :as session]
             [sports-manager.views.shared :as views.shared]))
 
@@ -29,6 +30,7 @@
    ["/school/setup" {:get auth/school-setup-page :post auth/school-setup-submit}]
    ["/auth/session" {:post auth/session-exchange}]
    ["/auth/logout" {:post auth/logout}]
+   ["/lang" {:post routes.shared/switch-lang}]
 
    ;; --- admin: users ---
    ["/users" {:get admin.users/users-page}]

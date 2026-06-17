@@ -3,7 +3,8 @@
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
             [sports-manager.config :as config]
-            [sports-manager.db :as db])
+            [sports-manager.db :as db]
+            [sports-manager.i18n :as i18n])
   (:import java.io.ByteArrayOutputStream
            java.time.Instant
            java.time.LocalDateTime
@@ -69,6 +70,7 @@
      :event/end-at (parse-datetime (str/trim (get params "event-end-at" "")))
      :event/visibility (when-not (str/blank? vis-raw) (keyword "event.visibility" vis-raw))
      :event/access-method (when-not (str/blank? acc-raw) (keyword "event.access" acc-raw))
+     :event/language (i18n/normalize-lang (get params "event-language"))
      :event/sports (let [v (get params "event-sports")]
                      (cond
                        (nil? v) #{}
@@ -84,7 +86,7 @@
    :event/start-at :event/end-at :event/status
    :event/visibility :event/access-method
    :event/code :event/published-at
-   :event/tenant
+   :event/tenant :event/language
    :event/sport-templates])
 
 (defn list-by-tenant
@@ -129,7 +131,7 @@
   "Create an event draft. `tenant-id` is a UUID; `sport-codes` is a set of
   :sport/* keywords. Returns the created event entity map."
   [tenant-id actor-uid
-   {:event/keys [name description start-at end-at visibility access-method]}
+   {:event/keys [name description start-at end-at visibility access-method language]}
    sport-codes]
   (let [event-id (UUID/randomUUID)
         code (generate-code)
@@ -146,6 +148,7 @@
               end-at (assoc :event/end-at end-at)
               visibility (assoc :event/visibility visibility)
               access-method (assoc :event/access-method access-method)
+              language (assoc :event/language (i18n/normalize-lang language))
               (seq sport-codes) (assoc :event/sport-templates (set sport-codes)))]
     (log/info "Creating event draft" name "for tenant" tenant-id "by" actor-uid)
     (db/put! doc)

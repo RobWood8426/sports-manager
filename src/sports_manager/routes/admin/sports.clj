@@ -13,7 +13,8 @@
       user-or-redirect
       (shared/html (views.admin/sport-templates
                     (sport-template/list-for-tenant tenant-id)
-                    (sport-template/selected-codes tenant-id))))))
+                    (sport-template/selected-codes tenant-id)
+                    {:lang (shared/current-lang request)})))))
 
 (defn sports-submit
   "POST /school/sports — persist the tenant's sport template selection."
@@ -42,7 +43,8 @@
           (shared/html (views.admin/sport-templates
                         (sport-template/list-for-tenant tenant-id)
                         (sport-template/selected-codes tenant-id)
-                        {:custom-errors errors :custom-data data}))
+                        {:custom-errors errors :custom-data data
+                         :lang (shared/current-lang request)}))
           (do
             (sport-template/create-custom! tenant-id data)
             (resp/redirect "/school/sports")))))))

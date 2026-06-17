@@ -14,7 +14,7 @@
   (shared/with-tenant-event
     request
     (fn [_user _tid ev _m]
-      (shared/html (views.fixtures/fixture-import-upload ev)))))
+      (shared/html (views.fixtures/fixture-import-upload ev {:lang (shared/current-lang request)})))))
 
 (defn fixture-import-upload
   "POST /events/:id/import/upload — parse CSV, store to temp file, redirect to mapping."
@@ -26,12 +26,14 @@
             file-part (get-in request [:multipart-params "csv-file"])]
         (cond
           (or (nil? file-part) (str/blank? (get file-part :filename "")))
-          (shared/html (views.fixtures/fixture-import-upload ev {:error "Please select a CSV file."}))
+          (shared/html (views.fixtures/fixture-import-upload ev {:error "Please select a CSV file."
+                                                                 :lang (shared/current-lang request)}))
 
           :else
           (let [parsed (fixture-import/parse-csv (io/input-stream (:tempfile file-part)))]
             (if (nil? parsed)
-              (shared/html (views.fixtures/fixture-import-upload ev {:error "Could not parse the file. Ensure it is a valid UTF-8 CSV."}))
+              (shared/html (views.fixtures/fixture-import-upload ev {:error "Could not parse the file. Ensure it is a valid UTF-8 CSV."
+                                                                     :lang (shared/current-lang request)}))
               (let [tmp-path (fixture-import/write-import-temp! parsed)]
                 (-> (resp/redirect (str "/events/" event-id "/import/map"))
                     (assoc :session (assoc (:session request) :import-tmp tmp-path)))))))))))
@@ -47,7 +49,8 @@
             parsed (fixture-import/read-import-temp tmp-path)]
         (if-not parsed
           (resp/redirect (str "/events/" event-id "/import"))
-          (shared/html (views.fixtures/fixture-import-map ev (:headers parsed) fixture-import/importable-fields)))))))
+          (shared/html (views.fixtures/fixture-import-map ev (:headers parsed) fixture-import/importable-fields
+                                                          {:lang (shared/current-lang request)})))))))
 
 (defn fixture-import-map-submit
   "POST /events/:id/import/map — apply column mapping, validate, show preview."
@@ -88,7 +91,8 @@
             preview (fixture-import/read-import-temp tmp-path)]
         (if-not preview
           (resp/redirect (str "/events/" event-id "/import"))
-          (shared/html (views.fixtures/fixture-import-preview ev (:valid preview) (:errors preview))))))))
+          (shared/html (views.fixtures/fixture-import-preview ev (:valid preview) (:errors preview)
+                                                              {:lang (shared/current-lang request)})))))))
 
 (defn fixture-import-confirm
   "POST /events/:id/import/confirm — create draft fixtures, clean up temp files, redirect."

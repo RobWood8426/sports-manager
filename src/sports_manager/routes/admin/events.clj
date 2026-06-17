@@ -29,7 +29,8 @@
       user-or-redirect
       (shared/html (views.events/event-new-form
                     (sport-template/list-all)
-                    (sport-template/selected-codes tenant-id))))))
+                    (sport-template/selected-codes tenant-id)
+                    {:lang (shared/current-lang request)})))))
 
 (defn event-create
   "POST /events — validate and create a draft event, then redirect home."
@@ -45,7 +46,7 @@
           (shared/html (views.events/event-new-form
                         (sport-template/list-all)
                         (sport-template/selected-codes tenant-id)
-                        {:errors errors :values parsed}))
+                        {:errors errors :values parsed :lang (shared/current-lang request)}))
           (do
             (event/create! tenant-id
                            (:user/firebase-uid current-user)
@@ -88,14 +89,16 @@
                                                  :teams teams
                                                  :codes-by-fixture codes-by-fixture
                                                  :new-code new-code
-                                                 :new-code-fixture-id new-code-fixture}))))))
+                                                 :new-code-fixture-id new-code-fixture
+                                                 :lang (shared/current-lang request)}))))))
 
 (defn dashboard-page [request]
   (shared/with-tenant-event
     request
     (fn [_user _tenant-id ev _m]
       (shared/html (views.events/event-dashboard
-                    ev (event-dashboard/dashboard-data (:event/id ev)))))))
+                    ev (event-dashboard/dashboard-data (:event/id ev))
+                    {:lang (shared/current-lang request)})))))
 
 (defn event-sport-config-save
   "POST /events/:id/sports/:sport/config — update per-sport overrides."
@@ -137,7 +140,8 @@
             b64 (.encodeToString (java.util.Base64/getEncoder) png)
             fmt (java.text.SimpleDateFormat. "d MMM yyyy")]
         (shared/html
-         (views.events/event-qr-page ev spectator-url b64 fmt))))))
+         (views.events/event-qr-page ev spectator-url b64 fmt
+                                     {:lang (shared/current-lang request)}))))))
 
 (defn participant-add
   "POST /events/:id/participants — add a participating school."
@@ -159,7 +163,8 @@
                                                   {:errors errors
                                                    :add-name (get params "participant-name")
                                                    :add-email (get params "participant-email")
-                                                   :add-phone (get params "participant-phone")}))
+                                                   :add-phone (get params "participant-phone")
+                                                   :lang (shared/current-lang request)}))
           (do
             (participant/add-to-event! event-id
                                        (:user/firebase-uid current-user)

@@ -1,69 +1,75 @@
 (ns sports-manager.views.scorekeeper
   "Scorekeeper mobile pages: code entry, confirmation, live scoring, submission."
   (:require [clojure.edn :as edn]
+            [sports-manager.i18n :as i18n]
             [sports-manager.views.shared :as shared]))
 
 (defn scorekeeper-code-entry
   "Public page where a scorekeeper enters their code to access a fixture."
-  [& [{:keys [error prefill]}]]
-  (shared/doc-public "Enter Scoring Code — SchoolScore"
-                     [:div.flex.flex-col.gap-4
-                      [:div.flex.justify-center.mb-1
-                       [:img {:src "/mark.svg" :alt "SchoolScore" :width "32" :height "32"}]]
-                      [:h1 "Scorer access"]
-                      [:p.opacity-70 "Enter your scoring code to access your assigned game."]
-                      (when error [:p.text-error error])
-                      [:form {:method "post" :action "/score"}
-                       (shared/csrf-field)
-                       [:div.form-control
-                        [:label.label [:span.label-text "Scoring code"]]
-                        [:input.input.input-bordered.input-lg.w-full.ss-mono.text-center
-                         {:id "score-code" :name "code" :type "text"
-                          :placeholder "e.g. ABC23DEF"
-                          :value (or prefill "")
-                          :autocomplete "off"
-                          :autofocus true
-                          :class "uppercase"
-                          :style "letter-spacing:0.22em;font-weight:700"}]]
-                       [:button.btn.btn-primary.btn-lg.w-full.mt-2 {:type "submit"} "Access game"]
-                       [:p.text-center.text-xs.opacity-50.mt-1
-                        "Codes are issued by your event coordinator."]]]))
+  [& [{:keys [error prefill lang] :or {lang "en"}}]]
+  (let [tr (fn [k] (i18n/t lang k))]
+    (shared/doc-public (tr :scorer/code-entry-title)
+                       {:lang lang}
+                       [:div.flex.flex-col.gap-4
+                        [:div.flex.justify-center.mb-1
+                         [:img {:src "/mark.svg" :alt (tr :scorer/brand-alt) :width "32" :height "32"}]]
+                        [:h1 (tr :scorer/access-title)]
+                        [:p.opacity-70 (tr :scorer/access-help)]
+                        (when error [:p.text-error error])
+                        [:form {:method "post" :action "/score"}
+                         (shared/csrf-field)
+                         [:div.form-control
+                          [:label.label [:span.label-text (tr :scorer/scoring-code)]]
+                          [:input.input.input-bordered.input-lg.w-full.ss-mono.text-center
+                           {:id "score-code" :name "code" :type "text"
+                            :placeholder (tr :scorer/code-placeholder)
+                            :value (or prefill "")
+                            :autocomplete "off"
+                            :autofocus true
+                            :class "uppercase"
+                            :style "letter-spacing:0.22em;font-weight:700"}]]
+                         [:button.btn.btn-primary.btn-lg.w-full.mt-2 {:type "submit"} (tr :scorer/access-game)]
+                         [:p.text-center.text-xs.opacity-50.mt-1
+                          (tr :scorer/codes-issued)]]])))
 
 (defn scorekeeper-confirm
   "Confirmation page shown after a valid code is entered."
-  [fixture scode-id]
-  (let [fmt (java.text.SimpleDateFormat. "d MMM yyyy HH:mm")
+  [fixture scode-id & [{:keys [lang] :or {lang "en"}}]]
+  (let [tr (fn [k] (i18n/t lang k))
+        fmt (java.text.SimpleDateFormat. "d MMM yyyy HH:mm")
         row (fn [label value]
               (list [:dt.ss-label {:class "self-center"} label]
                     [:dd.m-0.text-right.font-medium.text-base-content value]))]
-    (shared/doc-public "Confirm Game — SchoolScore"
+    (shared/doc-public (tr :scorer/confirm-title)
+                       {:lang lang}
                        [:div.flex.flex-col.gap-4
-                        [:h1 "Confirm your game"]
-                        [:p.opacity-70 "Please confirm you are scoring the correct game before you begin."]
+                        [:h1 (tr :scorer/confirm-heading)]
+                        [:p.opacity-70 (tr :scorer/confirm-help)]
                         [:div.ss-card.p-4
                          [:dl.m-0.grid.gap-x-4.gap-y-2.5 {:style "grid-template-columns:auto 1fr"}
-                          (row "Sport" (get-in fixture [:fixture/sport-template :sport-template/name] "—"))
-                          (row "Teams"
+                          (row (tr :scorer/sport) (get-in fixture [:fixture/sport-template :sport-template/name] "—"))
+                          (row (tr :scorer/teams)
                                (str (get-in fixture [:fixture/team-a :participant/name] "—")
                                     " vs "
                                     (get-in fixture [:fixture/team-b :participant/name] "—")))
                           (when-let [ag (:fixture/age-group fixture)]
-                            (row "Age group" ag))
+                            (row (tr :scorer/age-group) ag))
                           (when-let [v (:fixture/venue fixture)]
-                            (row "Venue" v))
+                            (row (tr :scorer/venue) v))
                           (when-let [s (:fixture/start-at fixture)]
-                            (row "Start" (.format fmt s)))]]
+                            (row (tr :scorer/start) (.format fmt s)))]]
                         [:form {:method "post" :action (str "/score/" (:fixture/id fixture) "/confirm")}
                          (shared/csrf-field)
                          [:input {:type "hidden" :name "scode-id" :value (str scode-id)}]
                          [:button.btn.btn-accent.btn-lg.w-full {:type "submit"}
-                          "Yes, this is my game — start scoring"]
-                         [:p.text-center.mt-2 [:a.opacity-70 {:href "/score"} "← Wrong game? Go back"]]]])))
+                          (tr :scorer/confirm-start)]
+                         [:p.text-center.mt-2 [:a.opacity-70 {:href "/score"} (tr :scorer/wrong-game)]]]])))
 
 (defn scorekeeper-live
   "Mobile scoring page."
-  [fixture scode-id score period-labels current-period]
-  (let [fmt (java.text.SimpleDateFormat. "d MMM yyyy HH:mm")
+  [fixture scode-id score period-labels current-period & [{:keys [lang] :or {lang "en"}}]]
+  (let [tr (fn [k] (i18n/t lang k))
+        fmt (java.text.SimpleDateFormat. "d MMM yyyy HH:mm")
         fixture-id (:fixture/id fixture)
         team-a (get-in fixture [:fixture/team-a :participant/name] "Team A")
         team-b (get-in fixture [:fixture/team-b :participant/name] "Team B")
@@ -91,15 +97,16 @@
                     (for [inc score-buttons]
                       (score-btn team inc (str "+" inc)))]
                    (score-btn team -1 "−1")])]
-    (shared/doc-public "Live Scoring — SchoolScore"
+    (shared/doc-public (tr :scorer/live-title)
+                       {:lang lang}
                        [:div#sync-status.sync-status {:data-fixture-id (str fixture-id)
                                                       :data-scode-id (str scode-id)}
                         [:span#sync-label.inline-flex.items-center.gap-2
-                         [:span.ss-live-dot] "online"]]
+                         [:span.ss-live-dot] (tr :scorer/online)]]
                        [:div.max-w-sm.mx-auto.p-4.flex.flex-col.gap-4
                         [:div.flex.items-center.justify-between
                          [:h2.text-xl.font-bold.m-0
-                          (get-in fixture [:fixture/sport-template :sport-template/name] "Game")]
+                          (get-in fixture [:fixture/sport-template :sport-template/name] (tr :scorer/game))]
                          (when-let [ag (:fixture/age-group fixture)]
                            [:span.badge.badge-sm.badge-outline ag])]
                         (when-let [v (:fixture/venue fixture)]
@@ -121,13 +128,13 @@
                          [:input {:type "hidden" :name "scode-id" :value (str scode-id)}]
                          [:button.btn.btn-error.btn-lg.w-full
                           {:type "submit"
-                           :onclick "return confirm('Submit final score? This cannot be undone.')"}
-                          "Submit final score"]]
+                           :onclick (str "return confirm('" (tr :scorer/submit-confirm) "')")}
+                          (tr :scorer/submit-final)]]
                         [:p.text-center.m-0
                          [:a.text-sm.opacity-60.no-underline
                           {:href (str "/e/fixture/" fixture-id) :target "_blank" :rel "noopener"
                            :class "hover:opacity-100 transition-opacity"}
-                          "View public scoreboard →"]]
+                          (tr :scorer/view-public)]]
                         (when-let [s (:fixture/start-at fixture)]
                           [:p.text-xs.opacity-50.text-center.mt-2 (.format fmt s)])]
                        [:script {:src "/js/score-queue.js" :type "module"}]
@@ -135,22 +142,24 @@
 
 (defn scorekeeper-submitted
   "Confirmation page shown after a final score has been submitted."
-  [final-score]
-  (let [status (:final-score/status final-score)
+  [final-score & [{:keys [lang] :or {lang "en"}}]]
+  (let [tr (fn [k] (i18n/t lang k))
+        status (:final-score/status final-score)
         a-score (:final-score/team-a-score final-score)
         b-score (:final-score/team-b-score final-score)
         accepted? (= status :final-score.status/accepted)
         pending? (= status :final-score.status/pending)]
-    (shared/doc-public "Score Submitted — SchoolScore"
+    (shared/doc-public (tr :scorer/submitted-title)
+                       {:lang lang}
                        [:div.flex.flex-col.gap-4.items-center.text-center
-                        [:h1 "Final score submitted"]
+                        [:h1 (tr :scorer/submitted-heading)]
                         [:div.ss-score.ss-score-md.text-base-content
                          (str a-score " – " b-score)]
                         (cond
                           accepted?
-                          [:p.text-success.font-semibold "Score accepted. The result has been recorded."]
+                          [:p.text-success.font-semibold (tr :scorer/submitted-accepted)]
                           pending?
-                          [:p.text-warning.font-semibold "Score is pending admin confirmation."]
+                          [:p.text-warning.font-semibold (tr :scorer/submitted-pending)]
                           :else
-                          [:p "Score submitted."])
-                        [:p.opacity-60 "You may close this window."]])))
+                          [:p (tr :scorer/submitted-default)])
+                        [:p.opacity-60 (tr :scorer/close-window)]])))

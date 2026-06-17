@@ -1,6 +1,7 @@
 (ns sports-manager.views.auth
   "Auth and onboarding pages: login, school setup, org selection."
   (:require [hiccup2.core :as h]
+            [sports-manager.i18n :as i18n]
             [sports-manager.views.shared :as shared]))
 
 (defn login
@@ -89,58 +90,62 @@
 
 (defn school-setup
   "School profile creation form. `errors` is a map of field-key → message."
-  [& [{:keys [errors email] :or {errors {}}}]]
-  (shared/doc "Set up your school — Sports Manager"
-              [:div.max-w-2xl.mx-auto
-               [:div.flex.justify-between.items-center.mb-4
-                [:h2.m-0 "Set up your school"]
-                [:form {:method "post" :action "/auth/logout"}
-                 (shared/csrf-field)
-                 [:button.btn.btn-ghost.btn-sm {:type "submit"} "Sign out"]]]
-               [:p "Complete your school profile to get started."]
-               [:form {:method "post" :action "/school/setup"}
-                (shared/csrf-field)
-                [:fieldset
-                 [:legend.ss-label.mb-2 "School details"]
-                 (shared/field errors :tenant/name "School name" {:required? true})
-                 (shared/field errors :tenant/contact-email "Contact email" {:type "email" :required? true :value email})
-                 (shared/field errors :tenant/contact-phone "Contact phone")
-                 (shared/field errors :tenant/website "Website" {:type "url" :placeholder "https://"})]
-                [:fieldset
-                 [:legend.ss-label.mb-2 "Location"]
-                 (shared/field errors :tenant/address "Street address")
-                 (shared/field errors :tenant/city "City")
-                 (shared/field errors :tenant/province "Province / State")
-                 (shared/field errors :tenant/country "Country")]
-                [:fieldset
-                 [:legend.ss-label.mb-2 "Map location (optional)"]
-                 [:div.flex.flex-wrap.gap-3.items-end
-                  (shared/field errors :tenant/latitude "Latitude" {:placeholder "-33.9249"})
-                  (shared/field errors :tenant/longitude "Longitude" {:placeholder "18.4241"})]]
-                [:div.flex.gap-3.mt-4
-                 [:button.btn.btn-primary {:type "submit"} "Create school"]]]]))
+  [& [{:keys [errors email lang] :or {errors {} lang "en"}}]]
+  (let [tr (fn [k] (i18n/t lang k))]
+    (shared/doc (tr :setup/page-title)
+                {:lang lang}
+                [:div.max-w-2xl.mx-auto
+                 [:div.flex.justify-between.items-center.mb-4
+                  [:h2.m-0 (tr :setup/heading)]
+                  [:form {:method "post" :action "/auth/logout"}
+                   (shared/csrf-field)
+                   [:button.btn.btn-ghost.btn-sm {:type "submit"} (tr :setup/sign-out)]]]
+                 [:p (tr :setup/intro)]
+                 [:form {:method "post" :action "/school/setup"}
+                  (shared/csrf-field)
+                  [:fieldset
+                   [:legend.ss-label.mb-2 (tr :setup/details-legend)]
+                   (shared/field errors :tenant/name (tr :setup/school-name) {:required? true})
+                   (shared/field errors :tenant/contact-email (tr :setup/contact-email) {:type "email" :required? true :value email})
+                   (shared/field errors :tenant/contact-phone (tr :setup/contact-phone))
+                   (shared/field errors :tenant/website (tr :setup/website) {:type "url" :placeholder "https://"})]
+                  [:fieldset
+                   [:legend.ss-label.mb-2 (tr :setup/location-legend)]
+                   (shared/field errors :tenant/address (tr :setup/address))
+                   (shared/field errors :tenant/city (tr :setup/city))
+                   (shared/field errors :tenant/province (tr :setup/province))
+                   (shared/field errors :tenant/country (tr :setup/country))]
+                  [:fieldset
+                   [:legend.ss-label.mb-2 (tr :setup/map-legend)]
+                   [:div.flex.flex-wrap.gap-3.items-end
+                    (shared/field errors :tenant/latitude (tr :setup/latitude) {:placeholder "-33.9249"})
+                    (shared/field errors :tenant/longitude (tr :setup/longitude) {:placeholder "18.4241"})]]
+                  [:div.flex.gap-3.mt-4
+                   [:button.btn.btn-primary {:type "submit"} (tr :setup/create)]]]])))
 
 (defn select-tenant
   "Org picker page shown when a user belongs to multiple tenants."
-  [memberships]
-  (shared/doc "Select organisation — Sports Manager"
-              [:div.max-w-lg.mx-auto
-               [:h2.text-2xl.font-semibold.mb-2 "Select organisation"]
-               [:p.opacity-60.mb-6 "Which organisation would you like to manage?"]
-               [:ul.flex.flex-col.gap-3
-                (for [m memberships]
-                  (let [tenant (:membership/tenant m)
-                        tid (:tenant/id tenant)
-                        tname (or (:tenant/name tenant) (str tid))
-                        tcity (:tenant/city tenant)]
-                    [:li
-                     [:form {:method "post" :action "/select-tenant"}
-                      (shared/csrf-field)
-                      [:input {:type "hidden" :name "tenant-id" :value (str tid)}]
-                      [:button.block.w-full.text-left.rounded-xl.border.border-base-300.bg-base-200.hover:bg-base-300.transition-colors.p-4
-                       {:type "submit"}
-                       [:div.flex.items-center.justify-between
-                        [:div
-                         [:div.font-semibold tname]
-                         (when tcity [:div.text-sm.opacity-60 tcity])]
-                        [:span.text-sm.opacity-40 "→"]]]]]))]]))
+  [memberships & [{:keys [lang] :or {lang "en"}}]]
+  (let [tr (fn [k] (i18n/t lang k))]
+    (shared/doc (tr :tenant/page-title)
+                {:lang lang}
+                [:div.max-w-lg.mx-auto
+                 [:h2.text-2xl.font-semibold.mb-2 (tr :tenant/heading)]
+                 [:p.opacity-60.mb-6 (tr :tenant/intro)]
+                 [:ul.flex.flex-col.gap-3
+                  (for [m memberships]
+                    (let [tenant (:membership/tenant m)
+                          tid (:tenant/id tenant)
+                          tname (or (:tenant/name tenant) (str tid))
+                          tcity (:tenant/city tenant)]
+                      [:li
+                       [:form {:method "post" :action "/select-tenant"}
+                        (shared/csrf-field)
+                        [:input {:type "hidden" :name "tenant-id" :value (str tid)}]
+                        [:button.block.w-full.text-left.rounded-xl.border.border-base-300.bg-base-200.hover:bg-base-300.transition-colors.p-4
+                         {:type "submit"}
+                         [:div.flex.items-center.justify-between
+                          [:div
+                           [:div.font-semibold tname]
+                           (when tcity [:div.text-sm.opacity-60 tcity])]
+                          [:span.text-sm.opacity-40 "→"]]]]]))]])))

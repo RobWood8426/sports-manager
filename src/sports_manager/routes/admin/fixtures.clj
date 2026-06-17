@@ -93,7 +93,8 @@
                                                   (fixture/list-by-event event-id)
                                                   (event-detail-sports ev)
                                                   {:fixture-errors errors
-                                                   :venues (venue/list-by-event event-id)}))
+                                                   :venues (venue/list-by-event event-id)
+                                                   :lang (shared/current-lang request)}))
           (do
             (fixture/create! event-id (:user/firebase-uid current-user) parsed)
             (resp/redirect (str "/events/" event-id))))))))
@@ -116,7 +117,8 @@
                                                       (participant/list-by-event event-id)
                                                       (fixture/list-by-event event-id)
                                                       (event-detail-sports ev)
-                                                      {:fixture-errors errors}))
+                                                      {:fixture-errors errors
+                                                       :lang (shared/current-lang request)}))
               (do
                 (fixture/update! fixture-id (:user/firebase-uid current-user) parsed)
                 (resp/redirect (str "/events/" event-id))))))))))
@@ -213,7 +215,8 @@
           {:status 404 :body "Fixture not found"}
           (let [fixture-with-event (assoc f :fixture/event {:event/id event-id})
                 comparison (final-score/compare-submissions fixture-id)]
-            (shared/html (views.fixtures/fixture-comparison fixture-with-event comparison))))))))
+            (shared/html (views.fixtures/fixture-comparison fixture-with-event comparison
+                                                            {:lang (shared/current-lang request)}))))))))
 
 (defn fixture-dispute-resolve
   "POST /events/:id/fixtures/:fid/resolve — admin confirms scores and resolves dispute."
@@ -237,7 +240,8 @@
           (let [comparison (final-score/compare-submissions fixture-id)
                 fixture-with-event (assoc f :fixture/event {:event/id event-id})]
             (shared/html (views.fixtures/fixture-comparison fixture-with-event comparison
-                                                            {:resolve-errors {:form "Both scores are required."}})))
+                                                            {:resolve-errors {:form "Both scores are required."}
+                                                             :lang (shared/current-lang request)})))
 
           :else
           (try
@@ -247,7 +251,8 @@
               (let [comparison (final-score/compare-submissions fixture-id)
                     fixture-with-event (assoc f :fixture/event {:event/id event-id})]
                 (shared/html (views.fixtures/fixture-comparison fixture-with-event comparison
-                                                                {:resolve-errors {:form (ex-message e)}}))))))))))
+                                                                {:resolve-errors {:form (ex-message e)}
+                                                                 :lang (shared/current-lang request)}))))))))))
 
 (defn disputes-page
   "GET /disputes — list all disputed final-score submissions for the tenant."
@@ -256,7 +261,7 @@
     (if-not tenant-id
       user-or-redirect
       (let [disputed (final-score/list-disputed-by-tenant tenant-id)]
-        (shared/html (views.fixtures/disputes-page disputed))))))
+        (shared/html (views.fixtures/disputes-page disputed {:lang (shared/current-lang request)}))))))
 
 (defn audit-log-page [request]
   (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
@@ -272,4 +277,5 @@
                       actor (audit/list-by-actor actor)
                       :else (audit/list-by-tenant tenant-id))
             filters {:action action :actor actor}]
-        (shared/html (views.fixtures/audit-log-page entries {:filters filters}))))))
+        (shared/html (views.fixtures/audit-log-page entries {:filters filters
+                                                             :lang (shared/current-lang request)}))))))
