@@ -14,9 +14,11 @@
             [sports-manager.views.events :as views.events]))
 
 (defn- event-detail-sports
-  "Resolve the sport-template records for an event's sport codes."
+  "Resolve the sport-template records for an event's sport codes.
+  `:event/sport-templates` is a set of sport-code keywords (e.g. :sport/rugby),
+  so filter the templates whose :sport-template/code is in that set."
   [ev]
-  (let [codes (into #{} (map :sport-template/code) (:event/sport-templates ev))]
+  (let [codes (set (:event/sport-templates ev))]
     (filter #(contains? codes (:sport-template/code %)) (sport-template/list-all))))
 
 (defn event-new-page
