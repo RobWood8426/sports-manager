@@ -38,7 +38,8 @@
  :aliases
  {;; Start the web server: clojure -M:run   (or use scripts/start.sh)
   :run
-  {:main-opts ["-m" "sports-manager.core"]}
+  {:jvm-opts  ["--sun-misc-unsafe-memory-access=allow"]
+   :main-opts ["-m" "sports-manager.core"]}
 
   ;; REPL + embedded nREPL on port 7888 so clojure-mcp can attach.
   ;; This is the alias the dev scripts use.
@@ -46,6 +47,7 @@
   {:extra-paths ["test" "dev"]
    :extra-deps  {cider/cider-nrepl {:mvn/version "0.50.2"}
                  ring/ring-devel   {:mvn/version "1.12.2"}}
+   :jvm-opts    ["--sun-misc-unsafe-memory-access=allow"]
    :main-opts   ["-m" "nrepl.cmdline"
                  "--middleware" "[cider.nrepl/cider-middleware]"
                  "--port" "7888"]}

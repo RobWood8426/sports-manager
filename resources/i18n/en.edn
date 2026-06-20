@@ -45,6 +45,10 @@
  :settings/upload-hint "PNG, JPEG, or WebP — max 2 MB"
  :settings/upload-logo "Upload logo"
  :settings/replace-logo "Replace logo"
+ :settings/danger-zone "Danger zone"
+ :settings/delete-school "Delete school"
+ :settings/delete-school-intro "Permanently delete this school and all its data. This cannot be undone."
+ :settings/delete-school-confirm "Delete this school and all its data? This cannot be undone."
 
  ;; --- Event form: default language ---
  :event/language-label "Default language"
@@ -415,6 +419,7 @@
  :tenant/page-title "Select organisation — Sports Manager"
  :tenant/heading "Select organisation"
  :tenant/intro "Which organisation would you like to manage?"
+ :tenant/add-school "Add another school"
 
  ;; --- Error page ---
  :error/go-home "Go home"}

@@ -79,7 +79,7 @@
                     "color:var(--text-strong);font-weight:600"
                     "color:var(--text-muted);font-weight:400")}
           (i18n/t lang label-key)])
-       (when (and nav-count (> nav-count 1))
+       (when (some? nav-count)
          [:a.transition-colors {:href "/select-tenant" :style "color:var(--text-muted)"}
           (i18n/t lang :nav/switch-org)])])]
    [:div.flex.items-center.gap-4
@@ -97,7 +97,7 @@
   An optional leading options map customises the standardized admin header:
     :user      signed-in user entity (shows email + Sign out)
     :active    active global-nav key (see `nav-items`); omit to hide the nav
-    :nav-count membership count (>1 shows the Switch org link)
+    :nav-count membership count (any value shows the Switch org link)
   When no options map is supplied, a plain brand-only header is rendered (e.g.
   the error page).
 
@@ -177,8 +177,8 @@
 
 (defn field
   "A labelled form input. Shows an inline error when `errors` contains the field key."
-  [errors field-key label & [{:keys [type placeholder required? value]
-                              :or {type "text" required? false}}]]
+  [errors field-key label & [{:keys [input-type placeholder required? value]
+                              :or {input-type "text" required? false}}]]
   [:div.form-control
    [:label.label
     [:span.label-text label
@@ -186,7 +186,7 @@
    [:input.input.input-bordered.w-full
     (cond-> {:id (name field-key)
              :name (name field-key)
-             :type type}
+             :type input-type}
       placeholder (assoc :placeholder placeholder)
       required? (assoc :required true)
       value (assoc :value value))]
@@ -196,8 +196,8 @@
 (defn toast-fragment
   "Inline HTML fragment — a DaisyUI toast that auto-dismisses after 3s.
   Rendered as a bare fragment (no doc wrapper) for HTMX swaps."
-  [message & [{:keys [type] :or {type :success}}]]
-  (let [alert-class (case type
+  [message & [{:keys [toast-type] :or {toast-type :success}}]]
+  (let [alert-class (case toast-type
                       :success "alert-success"
                       :error "alert-error"
                       "alert-info")]
@@ -355,3 +355,13 @@
         [:p.opacity-60 message]
         [:div.mt-6
          [:a.btn {:href "/"} (i18n/t "en" :error/go-home)]]]))
+
+(defn not-found-page
+  "Public-facing 404 page for spectator routes. Links back to /e."
+  [message]
+  (doc-public "Not Found — Sports Manager"
+              {:brand? true}
+              [:div.text-center.py-16
+               [:h2.text-4xl.font-bold.mb-4 "404"]
+               [:p.opacity-60.mb-8 message]
+               [:a.btn {:href "/e"} "Go to events"]]))

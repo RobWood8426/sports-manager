@@ -21,7 +21,8 @@
   (stop)
   (go))
 
+(go)
+
 (comment
-  (go)
   (restart)
   (stop))

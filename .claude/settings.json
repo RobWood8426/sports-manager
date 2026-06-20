@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__clojure-sports__read_file",
+      "Bash(clj-kondo --lint *)"
+    ]
+  }
+}

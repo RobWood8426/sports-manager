@@ -121,3 +121,23 @@
   [tenant-id]
   (db/retract-attrs! tenant-id [:tenant/logo-key :tenant/logo-content-type])
   (find-by-id tenant-id))
+
+(defn delete!
+  "Delete a school tenant and all its owned data in one transaction.
+  Irreversible. The caller is responsible for any storage cleanup (e.g. logo file)."
+  [tenant-id]
+  (let [owned-attrs [:event/tenant :fixture/tenant :membership/tenant
+                     :venue/tenant :team/tenant :participant/tenant
+                     :invite/tenant :score-event/tenant :sport-template/tenant
+                     :audit/tenant :scode/tenant :assignment/tenant
+                     :final-score/tenant]
+        child-ids (into #{}
+                        (mapcat (fn [attr]
+                                  (map first (db/q {:find '[?e]
+                                                    :in '[?tid]
+                                                    :where [['?e attr '?tid]]}
+                                                   tenant-id)))
+                                owned-attrs))]
+    (log/info "Deleting school tenant" tenant-id "with" (count child-ids) "child entities")
+    (db/delete-many! (conj child-ids tenant-id))
+    (log/info "School deleted:" tenant-id)))

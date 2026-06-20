@@ -1,12 +1,10 @@
 (ns sports-manager.config
-  "Environment-driven configuration. All keys are optional in dev; the defaults
-  give an in-memory XTDB node so a bare `clojure -M:run` boots without setup.
-
-  Values come from `dotenv/get-env` (real process env wins over ./.env)."
+  "Environment-driven configuration. Values come from `dotenv/get-env`
+  (real process env wins over ./.env)."
   (:require [sports-manager.dotenv :refer [get-env]]))
 
 (def xtdb-data-dir
-  "Path to the XTDB RocksDB data directory (prod only).
+  "Path to the XTDB RocksDB data directory.
   Defaults to ./data/xtdb — override with SM_XTDB_DATA_DIR."
   (or (get-env "SM_XTDB_DATA_DIR") "data/xtdb"))
 

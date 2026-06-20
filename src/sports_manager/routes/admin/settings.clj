@@ -5,6 +5,7 @@
             [ring.util.response :as resp]
             [sports-manager.routes.shared :as shared]
             [sports-manager.school :as school]
+            [sports-manager.session :as session]
             [sports-manager.storage :as storage]
             [sports-manager.views.admin :as views.admin]))
 
@@ -64,14 +65,14 @@
           :else
           (let [tenant (school/find-by-id tenant-id)
                 old-key (:tenant/logo-key tenant)
-                key (storage/object-key tenant-id :logo content-type)
-                bytes (with-open [in (io/input-stream (:tempfile file-part))
-                                  bos (java.io.ByteArrayOutputStream.)]
-                        (io/copy in bos)
-                        (.toByteArray bos))]
-            (storage/put-object storage/default-storage key bytes content-type)
-            (school/set-logo! tenant-id key content-type)
-            (when (and old-key (not= old-key key))
+                object-key (storage/object-key tenant-id :logo content-type)
+                object-bytes (with-open [in (io/input-stream (:tempfile file-part))
+                                         bos (java.io.ByteArrayOutputStream.)]
+                               (io/copy in bos)
+                               (.toByteArray bos))]
+            (storage/put-object storage/default-storage object-key object-bytes content-type)
+            (school/set-logo! tenant-id object-key content-type)
+            (when (and old-key (not= old-key object-key))
               (storage/delete-object storage/default-storage old-key))
             (resp/redirect "/school/settings")))))))
 
@@ -86,6 +87,18 @@
         (when old-key (storage/delete-object storage/default-storage old-key))
         (resp/redirect "/school/settings")))))
 
+(defn school-delete
+  "POST /school/settings/delete — permanently delete the school and all its data."
+  [request]
+  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
+    (if-not tenant-id
+      user-or-redirect
+      (let [logo-key (:tenant/logo-key (school/find-by-id tenant-id))]
+        (school/delete! tenant-id)
+        (when logo-key (storage/delete-object storage/default-storage logo-key))
+        (-> (resp/redirect "/")
+            (session/clear-active-tenant))))))
+
 (defn media
   "GET /media/:tenant-id/:kind/:filename — serve an uploaded object.
   Public read (logos/banners render on public event pages); the URL embeds the
@@ -93,10 +106,10 @@
   traversal."
   [request]
   (let [{:keys [tenant-id kind filename]} (:path-params request)
-        key (str tenant-id "/" kind "/" filename)]
-    (if-let [{:keys [bytes content-type]} (storage/get-object storage/default-storage key)]
-      (-> (resp/response (java.io.ByteArrayInputStream. bytes))
+        object-key (str tenant-id "/" kind "/" filename)]
+    (if-let [{:keys [content-type] object-bytes :bytes} (storage/get-object storage/default-storage object-key)]
+      (-> (resp/response (java.io.ByteArrayInputStream. object-bytes))
           (resp/content-type content-type)
           (resp/header "Cache-Control" "public, max-age=3600")
-          (resp/header "Content-Length" (str (alength ^bytes bytes))))
+          (resp/header "Content-Length" (str (alength ^bytes object-bytes))))
       {:status 404 :body "Not found"})))

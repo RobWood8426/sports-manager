@@ -1,9 +1,8 @@
 <configuration>
 
-  <!-- Structured JSON to stdout (parseable by log aggregators) -->
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-    <encoder class="net.logstash.logback.encoder.LogstashEncoder">
-      <timeZone>UTC</timeZone>
+    <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+      <pattern>%d{HH:mm:ss} %highlight(%-5level) %msg%n</pattern>
     </encoder>
   </appender>
 

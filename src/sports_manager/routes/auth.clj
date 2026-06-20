@@ -75,9 +75,9 @@
             errors (school/validate profile)]
         (if (seq errors)
           (shared/html (views.auth/school-setup {:errors errors :lang (shared/current-lang request)}))
-          (do
-            (school/create! uid profile)
-            (resp/redirect "/")))))))
+          (let [tenant (school/create! uid profile)]
+            (-> (resp/redirect "/")
+                (session/set-active-tenant (:tenant/id tenant)))))))))
 
 (defn session-exchange
   "POST /auth/session — verify a Firebase ID token, upsert the user, set cookie."

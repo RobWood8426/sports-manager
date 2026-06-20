@@ -11,6 +11,7 @@
             [sports-manager.routes.shared :as shared]
             [sports-manager.school :as school]
             [sports-manager.score :as score]
+            [sports-manager.views.shared :as views.shared]
             [sports-manager.views.spectator :as views.spectator]))
 
 (defn spectator-landing
@@ -36,9 +37,13 @@
         ev (when code (event/find-by-code code))]
     (cond
       (nil? ev)
-      {:status 404 :body "Event not found"}
+      (-> (resp/response (views.shared/not-found-page "No event found for that code."))
+          (resp/content-type "text/html; charset=utf-8")
+          (resp/status 404))
       (not= :event.status/published (:event/status ev))
-      {:status 404 :body "Event not found"}
+      (-> (resp/response (views.shared/not-found-page "This event is not yet published."))
+          (resp/content-type "text/html; charset=utf-8")
+          (resp/status 404))
       :else
       (let [event-id (:event/id ev)
             qp (:query-params request)
@@ -73,7 +78,9 @@
         fid (shared/parse-event-id fid-str)
         f (when fid (fixture/find-by-id fid))]
     (if-not f
-      {:status 404 :body "Fixture not found"}
+      (-> (resp/response (views.shared/not-found-page "Fixture not found."))
+          (resp/content-type "text/html; charset=utf-8")
+          (resp/status 404))
       (let [live-score (score/current-score fid)
             final (->> (final-score/find-by-fixture fid)
                        (filter #(= :final-score.status/accepted (:final-score/status %)))

@@ -45,6 +45,10 @@
  :settings/upload-hint "PNG, JPEG of WebP — maks 2 MB"
  :settings/upload-logo "Laai logo op"
  :settings/replace-logo "Vervang logo"
+ :settings/danger-zone "Gevaarzone"
+ :settings/delete-school "Verwyder skool"
+ :settings/delete-school-intro "Verwyder hierdie skool en al sy data permanent. Dit kan nie ongedaan gemaak word nie."
+ :settings/delete-school-confirm "Verwyder hierdie skool en al sy data? Dit kan nie ongedaan gemaak word nie."
 
  ;; --- Event form: default language ---
  :event/language-label "Verstektaal"
@@ -415,6 +419,7 @@
  :tenant/page-title "Kies organisasie — Sports Manager"
  :tenant/heading "Kies organisasie"
  :tenant/intro "Watter organisasie wil jy bestuur?"
+ :tenant/add-school "Voeg nog 'n skool by"
 
  ;; --- Error page ---
  :error/go-home "Gaan na tuisblad"}

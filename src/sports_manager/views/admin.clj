@@ -263,7 +263,7 @@
                   [:div.mt-4
                    [:button.btn.btn-primary {:type "submit"} (tr :settings/save)]]]]
 
-                [:section
+                [:section.mb-10
                  [:h3.text-xl.font-semibold.mb-4 (tr :settings/logo-section)]
                  (when (:file errors)
                    [:div.alert.alert-error.mb-4 [:span (:file errors)]])
@@ -286,4 +286,15 @@
                     {:type "file" :name "logo-file" :accept "image/png,image/jpeg,image/webp"}]
                    [:label.label [:span.label-text-alt (tr :settings/upload-hint)]]]
                   [:div.mt-3
-                   [:button.btn {:type "submit"} (tr (if logo-url :settings/replace-logo :settings/upload-logo))]]]])))
+                   [:button.btn {:type "submit"} (tr (if logo-url :settings/replace-logo :settings/upload-logo))]]]]
+
+                [:section
+                 [:h3.text-xl.font-semibold.mb-4.text-error (tr :settings/danger-zone)]
+                 [:div.border.border-error.rounded-lg.p-4
+                  [:p.mb-4.text-sm (tr :settings/delete-school-intro)]
+                  [:form {:method "post" :action "/school/settings/delete"}
+                   (shared/csrf-field)
+                   [:button.btn.btn-error
+                    {:type "submit"
+                     :onclick (str "return confirm('" (tr :settings/delete-school-confirm) "')")}
+                    (tr :settings/delete-school)]]]])))

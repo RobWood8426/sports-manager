@@ -43,7 +43,7 @@
           [:input.input.input-bordered.w-full {:id "email" :type "email" :placeholder "Email" :required true}]
           [:input.input.input-bordered.w-full {:id "password" :type "password" :placeholder "Password" :required true :minlength "6"}]
           [:div.flex.gap-3
-           [:button.btn.flex-1 {:type "submit"} "Sign in"]
+           [:button.btn.flex-1 {:id "signin" :type "submit"} "Sign in"]
            [:button.btn.btn-outline.flex-1 {:id "signup" :type "button"} "Create account"]]]]
         [:p.text-error {:id "error"}]]]
       [:script {:type "module"}
@@ -72,20 +72,30 @@
          "  else { err.textContent = 'Sign-in rejected.'; }"
          "}"
          "function fail(e) { err.textContent = e.message; }"
+         "function setLoading(btnId, on) {"
+         "  ['google','signin','signup'].forEach(function(id) {"
+         "    var b = document.getElementById(id); if (b) b.disabled = on;"
+         "  });"
+         "  var btn = document.getElementById(btnId); if (!btn) return;"
+         "  if (on) { var sp = document.createElement('span'); sp.className = 'loading loading-spinner loading-sm'; btn.prepend(sp); }"
+         "  else { var ex = btn.querySelector('.loading'); if (ex) ex.remove(); }"
+         "}"
          "const email = () => document.getElementById('email').value;"
          "const pass  = () => document.getElementById('password').value;"
          "document.getElementById('google').addEventListener('click', async () => {"
+         "  setLoading('google', true);"
          "  try { await establish(await signInWithPopup(auth, new GoogleAuthProvider())); }"
-         "  catch (e) { fail(e); }"
+         "  catch (e) { fail(e); setLoading('google', false); }"
          "});"
          "document.getElementById('login').addEventListener('submit', async (e) => {"
-         "  e.preventDefault();"
+         "  e.preventDefault(); setLoading('signin', true);"
          "  try { await establish(await signInWithEmailAndPassword(auth, email(), pass())); }"
-         "  catch (e) { fail(e); }"
+         "  catch (e) { fail(e); setLoading('signin', false); }"
          "});"
          "document.getElementById('signup').addEventListener('click', async () => {"
+         "  setLoading('signup', true);"
          "  try { await establish(await createUserWithEmailAndPassword(auth, email(), pass())); }"
-         "  catch (e) { fail(e); }"
+         "  catch (e) { fail(e); setLoading('signup', false); }"
          "});"))]]])))
 
 (defn school-setup
@@ -106,9 +116,9 @@
                   [:fieldset
                    [:legend.ss-label.mb-2 (tr :setup/details-legend)]
                    (shared/field errors :tenant/name (tr :setup/school-name) {:required? true})
-                   (shared/field errors :tenant/contact-email (tr :setup/contact-email) {:type "email" :required? true :value email})
+                   (shared/field errors :tenant/contact-email (tr :setup/contact-email) {:input-type "email" :required? true :value email})
                    (shared/field errors :tenant/contact-phone (tr :setup/contact-phone))
-                   (shared/field errors :tenant/website (tr :setup/website) {:type "url" :placeholder "https://"})]
+                   (shared/field errors :tenant/website (tr :setup/website) {:input-type "url" :placeholder "https://"})]
                   [:fieldset
                    [:legend.ss-label.mb-2 (tr :setup/location-legend)]
                    (shared/field errors :tenant/address (tr :setup/address))
@@ -148,4 +158,10 @@
                           [:div
                            [:div.font-semibold tname]
                            (when tcity [:div.text-sm.opacity-60 tcity])]
-                          [:span.text-sm.opacity-40 "→"]]]]]))]])))
+                          [:span.text-sm.opacity-40 "→"]]]]]))
+                  [:li
+                   [:a.block.w-full.text-left.rounded-xl.border.border-dashed.border-base-300.hover:bg-base-200.transition-colors.p-4.no-underline
+                    {:href "/school/setup"}
+                    [:div.flex.items-center.justify-between
+                     [:span.text-sm.opacity-60 (tr :tenant/add-school)]
+                     [:span.text-sm.opacity-40 "+"]]]]]])))

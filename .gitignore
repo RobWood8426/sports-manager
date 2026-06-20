@@ -11,16 +11,9 @@
 # Local secrets / config — never commit
 .env
 /.secrets/
-.mcp.json
 
 # Local app data — XTDB RocksDB + user uploads (logos, banners).
 # Mirrors the Fly volume; never commit. (SM_XTDB_DATA_DIR / SM_UPLOAD_DIR)
 /data/
+.portal/
 
-# Datomic transactor data (Docker volume mounts)
-/.datomic-data/
-/.datomic-log/
-
-# Datomic distribution (symlinked or downloaded for Docker build)
-/datomic-pro-*/
-datomic-pro*.zip

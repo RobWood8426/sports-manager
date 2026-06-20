@@ -47,6 +47,7 @@
    ["/school/settings" {:get admin.settings/settings-page :post admin.settings/profile-submit}]
    ["/school/settings/logo" {:post admin.settings/logo-upload}]
    ["/school/settings/logo/clear" {:post admin.settings/logo-clear}]
+   ["/school/settings/delete" {:post admin.settings/school-delete}]
 
    ;; --- admin: events ---
    ["/events/create" {:get admin.events/event-new-page}]
@@ -104,6 +105,16 @@
    ;; --- public: uploaded media (logos, banners) ---
    ["/media/:tenant-id/:kind/:filename" {:get admin.settings/media}]])
 
+(defn- wrap-not-found
+  "Log every 404 response with the request method and URI."
+  [handler]
+  (fn [request]
+    (let [response (handler request)]
+      (when (= 404 (:status response))
+        (log/warn "404 Not Found" {:method (-> request :request-method name str/upper-case)
+                                   :uri (:uri request)}))
+      response)))
+
 (defn- wrap-exception
   "Catch unhandled exceptions and return a structured error response."
   [handler]
@@ -154,10 +165,15 @@
          (ring/router routes {:conflicts nil})
          (ring/routes
           (ring/create-resource-handler {:path "/"})
-          (ring/create-default-handler)))
+          (ring/create-default-handler
+           {:not-found (fn [_]
+                         (-> (resp/response (views.shared/error-page 404 "Page not found."))
+                             (resp/content-type "text/html; charset=utf-8")
+                             (resp/status 404)))})))
         session/wrap-session-identity
         wrap-csrf
         (wrap-defaults (-> site-defaults
                            (assoc-in [:security :anti-forgery] false)
                            (assoc-in [:session :store] (cookie-store {:key session-key}))))
-        wrap-exception)))
+        wrap-exception
+        wrap-not-found)))

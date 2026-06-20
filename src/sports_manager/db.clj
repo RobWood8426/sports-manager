@@ -5,8 +5,7 @@
   :user/firebase-uid, :sport-template/code, etc.) IS its :xt/id. Refs store
   the target's :xt/id value directly — no numeric eids.
 
-  Dev/test: call (start!) with no args -> fully in-memory node, no files.
-  Prod: SM_ENV=production -> RocksDB-backed node under SM_XTDB_DATA_DIR."
+  Always RocksDB-backed (dev and prod) under SM_XTDB_DATA_DIR (default: data/xtdb)."
   (:require [clojure.tools.logging :as log]
             [sports-manager.config :as config]
             [xtdb.api :as xt])
@@ -20,14 +19,12 @@
 ;; ---------------------------------------------------------------------------
 
 (defn- node-config []
-  (if config/prod?
-    (let [dir config/xtdb-data-dir
-          kv (fn [sub] {:xtdb/module 'xtdb.rocksdb/->kv-store
-                        :db-dir (str dir "/" sub)})]
-      {:xtdb/tx-log {:kv-store (kv "tx-log")}
-       :xtdb/document-store {:kv-store (kv "docs")}
-       :xtdb/index-store {:kv-store (kv "index")}})
-    {}))
+  (let [dir config/xtdb-data-dir
+        kv (fn [sub] {:xtdb/module 'xtdb.rocksdb/->kv-store
+                      :db-dir (str dir "/" sub)})]
+    {:xtdb/tx-log {:kv-store (kv "tx-log")}
+     :xtdb/document-store {:kv-store (kv "docs")}
+     :xtdb/index-store {:kv-store (kv "index")}}))
 
 ;; ---------------------------------------------------------------------------
 ;; Lifecycle
@@ -40,7 +37,7 @@
   ([seed-fns]
    (when (nil? @node)
      (reset! node (xt/start-node (node-config)))
-     (log/info "Started XTDB node" (if config/prod? "(rocksdb)" "(in-memory)"))
+     (log/info "Started XTDB node (rocksdb)" config/xtdb-data-dir)
      (doseq [f seed-fns] (f)))
    @node))
 
@@ -149,6 +146,11 @@
   [id]
   (submit! [[::xt/delete id]]))
 
+(defn delete-many!
+  "Delete multiple entities by id in a single transaction."
+  [ids]
+  (submit! (mapv (fn [id] [::xt/delete id]) ids)))
+
 ;; ---------------------------------------------------------------------------
 ;; Multi-tenancy
 ;; ---------------------------------------------------------------------------
@@ -162,8 +164,8 @@
     (tenant-scoped :event/tenant tenant-id '[[?e :event/name ?n]])"
   ([tenant-attr tenant-id where]
    (tenant-scoped tenant-attr tenant-id '[?e] where))
-  ([tenant-attr tenant-id find where]
-   (let [query {:find (vec find)
+  ([tenant-attr tenant-id find-spec where]
+   (let [query {:find (vec find-spec)
                 :in '[?tid]
                 :where (into [['?e tenant-attr '?tid]] where)}]
      (xt/q (db) query tenant-id))))

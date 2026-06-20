@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "clojure-sports": {
+      "command": "bash",
+      "args": [
+        "-lc",
+        "if [ ! -f .nrepl-port ]; then echo 'clojure-sports: no .nrepl-port — start a REPL first (scripts/dev.sh)' >&2; exit 1; fi; exec clojure -X:mcp :port $(cat .nrepl-port)"
+      ],
+      "env": {}
+    }
+  }
+}
