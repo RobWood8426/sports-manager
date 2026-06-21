@@ -48,6 +48,8 @@
    ["/school/settings/logo" {:post admin.settings/logo-upload}]
    ["/school/settings/logo/clear" {:post admin.settings/logo-clear}]
    ["/school/settings/delete" {:post admin.settings/school-delete}]
+   ["/school/venues" {:post admin.settings/venue-create}]
+   ["/school/venues/:vid/delete" {:post admin.settings/venue-delete}]
 
    ;; --- admin: events ---
    ["/events/create" {:get admin.events/event-new-page}]
@@ -62,6 +64,9 @@
    ["/events/:id/teams/:tid/delete" {:post admin.events/team-delete}]
    ["/events/:id/venues" {:post admin.events/venue-create}]
    ["/events/:id/venues/:vid/delete" {:post admin.events/venue-delete}]
+   ["/events/:id/wizard/fields" {:get admin.events/event-wizard-fields-page :post admin.events/event-wizard-fields-save}]
+   ["/events/:id/wizard/fields/new" {:post admin.events/event-wizard-fields-add}]
+   ["/events/:id/wizard/age-groups" {:get admin.events/event-wizard-age-groups-page :post admin.events/event-wizard-age-groups-save}]
    ["/events/:id/sports/:sport/config" {:post admin.events/event-sport-config-save}]
 
    ;; --- admin: fixtures ---

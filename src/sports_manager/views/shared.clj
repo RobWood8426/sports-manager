@@ -120,11 +120,14 @@
         [:link {:href "https://cdn.jsdelivr.net/npm/daisyui@5" :rel "stylesheet" :type "text/css"}]
         [:script {:src "https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"}]
         [:script {:src "https://unpkg.com/htmx.org@2.0.3"}]
-        [:link {:rel "stylesheet" :href "/css/app.css"}]]
+        [:link {:rel "stylesheet" :href "/css/app.css"}]
+        [:link {:rel "stylesheet" :href "/css/flatpickr.min.css"}]]
        [:body
         (admin-header opts)
         (into [:main] body)
-        [:script {:src "/js/form-spinner.js"}]]]))))
+        [:script {:src "/js/form-spinner.js"}]
+        [:script {:src "/js/flatpickr.min.js"}]
+        [:script {:src "/js/datetime-picker.js"}]]]))))
 
 (defn doc-public
   "Full HTML document for public (unauthenticated) pages.

@@ -2,6 +2,7 @@
   "Event (sports day) creation, query, and lifecycle. (SPO-26, SPO-29, SPO-30)"
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
+            [sports-manager.age-group :as age-group]
             [sports-manager.config :as config]
             [sports-manager.db :as db]
             [sports-manager.i18n :as i18n])
@@ -87,7 +88,7 @@
    :event/visibility :event/access-method
    :event/code :event/published-at
    :event/tenant :event/language
-   :event/sport-templates])
+   :event/sport-templates :event/age-groups])
 
 (defn list-by-tenant
   "Return all events for `tenant-id`, most-recent first."
@@ -153,6 +154,22 @@
     (log/info "Creating event draft" name "for tenant" tenant-id "by" actor-uid)
     (db/put! doc)
     (find-by-id event-id)))
+
+(defn set-age-groups!
+  "Replace the set of age-groups in use for an event (wizard step 3). Each
+  code must be a recognised sports-manager.age-group keyword. Returns the
+  updated event entity map."
+  [event-id age-group-codes]
+  (when-not (db/exists? event-id)
+    (throw (ex-info "Event not found" {:event/id event-id})))
+  (let [codes (set age-group-codes)
+        invalid (remove age-group/valid? codes)]
+    (when (seq invalid)
+      (throw (ex-info "Invalid age-group code(s)" {:invalid invalid})))
+    (if (seq codes)
+      (db/merge! event-id {:event/age-groups codes})
+      (db/retract-attrs! event-id [:event/age-groups])))
+  (find-by-id event-id))
 
 (defn publish!
   "Transition a draft event to published. Returns the updated event entity map.

@@ -1,10 +1,11 @@
 (ns sports-manager.venue
-  "Venue management per event (SPO-35).
+  "Venue (field) management, owned by the school/tenant (SPO-35).
 
-  Venues are scoped to an event and tenant. Each venue has a name, type,
-  optional map coordinates, and optional display order. Fixtures reference
-  venues via :fixture/venue-ref (the legacy :fixture/venue string is retained
-  for backwards compatibility)."
+  Venues are a reusable pool scoped to a tenant -- not to a single event.
+  Events select a subset of the pool via sports-manager.event-field. Each
+  venue has a name, type, optional map coordinates, and optional display
+  order. Fixtures reference venues via :fixture/venue-ref (the legacy
+  :fixture/venue string is retained for backwards compatibility)."
   (:require [clojure.string :as str]
             [sports-manager.db :as db])
   (:import java.util.UUID))
@@ -27,21 +28,21 @@
    :venue/lat
    :venue/lng
    :venue/type
-   :venue/event])
+   :venue/tenant])
 
 (defn find-by-id
   "Return a venue entity by UUID, or nil."
   [venue-id]
   (db/pull pull-pattern venue-id))
 
-(defn list-by-event
-  "Return all venues for an event, sorted by display-order then name."
-  [event-id]
+(defn list-by-tenant
+  "Return all venues owned by a tenant (school), sorted by display-order then name."
+  [tenant-id]
   (let [ids (map first (db/q '{:find [?vid]
-                               :in [?eid]
-                               :where [[?v :venue/event ?eid]
+                               :in [?tid]
+                               :where [[?v :venue/tenant ?tid]
                                        [?v :venue/id ?vid]]}
-                             event-id))]
+                             tenant-id))]
     (->> ids
          (mapv #(db/pull pull-pattern %))
          (filter :venue/id)
@@ -70,17 +71,14 @@
       (not (str/blank? order-str)) (assoc :venue/display-order (parse-long order-str)))))
 
 (defn create!
-  "Create a venue for an event. Returns the created venue entity."
-  [event-id {:venue/keys [name type lat lng display-order]}]
-  (let [event (db/entity event-id)
-        _ (when-not event
-            (throw (ex-info "Event not found" {:event/id event-id})))
-        tenant-id (:event/tenant event)
-        venue-id (UUID/randomUUID)
+  "Create a venue in a tenant's field pool. Returns the created venue entity."
+  [tenant-id {:venue/keys [name type lat lng display-order]}]
+  (when-not (db/exists? tenant-id)
+    (throw (ex-info "Tenant not found" {:tenant/id tenant-id})))
+  (let [venue-id (UUID/randomUUID)
         doc (cond-> {:xt/id venue-id
                      :venue/id venue-id
                      :venue/name name
-                     :venue/event event-id
                      :venue/tenant tenant-id}
               type (assoc :venue/type type)
               lat (assoc :venue/lat lat)

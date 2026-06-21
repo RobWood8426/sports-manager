@@ -1,8 +1,9 @@
 (ns sports-manager.routes.admin.events
-  "Event, participant, team, and venue handlers."
+  "Event, participant, team, and venue/field handlers."
   (:require [ring.util.response :as resp]
             [sports-manager.event :as event]
             [sports-manager.event-dashboard :as event-dashboard]
+            [sports-manager.event-field :as event-field]
             [sports-manager.event-sport :as event-sport]
             [sports-manager.fixture :as fixture]
             [sports-manager.participant :as participant]
@@ -33,7 +34,8 @@
                     {:lang (shared/current-lang request)})))))
 
 (defn event-create
-  "POST /events — validate and create a draft event, then redirect home."
+  "POST /events — validate and create a draft event, then continue to
+  wizard step 2 (select fields)."
   [request]
   (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
     (if-not tenant-id
@@ -47,12 +49,11 @@
                         (sport-template/list-all)
                         (sport-template/selected-codes tenant-id)
                         {:errors errors :values parsed :lang (shared/current-lang request)}))
-          (do
-            (event/create! tenant-id
-                           (:user/firebase-uid current-user)
-                           parsed
-                           (:event/sports parsed))
-            (resp/redirect "/")))))))
+          (let [ev (event/create! tenant-id
+                                  (:user/firebase-uid current-user)
+                                  parsed
+                                  (:event/sports parsed))]
+            (resp/redirect (str "/events/" (:event/id ev) "/wizard/fields"))))))))
 
 (defn event-detail-page
   "GET /events/:id — show event detail with participants, teams, and fixtures."
@@ -74,7 +75,7 @@
             all-fixtures (fixture/list-by-event event-id)
             fixtures (fixture/filter-fixtures all-fixtures fixture-filters)
             sport-configs (event-sport/list-by-event event-id)
-            venues (venue/list-by-event event-id)
+            venues (event-field/list-for-event event-id)
             teams (team/list-by-event event-id)
             sports (event-detail-sports ev)
             codes-by-fixture (into {}
@@ -215,23 +216,26 @@
         (resp/redirect (str "/events/" event-id))))))
 
 (defn venue-create
-  "POST /events/:id/venues — create a venue for this event."
+  "POST /events/:id/venues — add a new field to the school's pool and select
+  it for this event in one step (used by the inline form on the event
+  detail page; the wizard's step 2 has its own equivalent route)."
   [request]
   (shared/with-tenant-event
     request
-    (fn [_user _tenant-id ev _m]
+    (fn [_user tenant-id ev _m]
       (let [event-id (:event/id ev)
             params (shared/form-params request)
             data (venue/parse-form params)
             errors (venue/validate data)]
         (if (seq errors)
           (resp/redirect (str "/events/" event-id))
-          (do
-            (venue/create! event-id data)
+          (let [v (venue/create! tenant-id data)]
+            (event-field/add! event-id (:venue/id v))
             (resp/redirect (str "/events/" event-id))))))))
 
 (defn venue-delete
-  "POST /events/:id/venues/:vid/delete — retract a venue."
+  "POST /events/:id/venues/:vid/delete — deselect a field from this event.
+  The field itself stays in the school's pool for other events to use."
   [request]
   (shared/with-tenant-event
     request
@@ -239,6 +243,82 @@
       (let [event-id (:event/id ev)
             venue-id (shared/parse-event-id (get-in request [:path-params :vid]))]
         (when venue-id
-          (try (venue/delete! venue-id)
-               (catch clojure.lang.ExceptionInfo _ nil)))
+          (event-field/remove! event-id venue-id))
+        (resp/redirect (str "/events/" event-id))))))
+
+(defn event-wizard-fields-page
+  "GET /events/:id/wizard/fields — wizard step 2: select which of the
+  school's fields are in use for this event."
+  [request]
+  (shared/with-tenant-event
+    request
+    (fn [_user tenant-id ev _m]
+      (let [event-id (:event/id ev)]
+        (shared/html (views.events/event-wizard-fields-page
+                      event-id
+                      (venue/list-by-tenant tenant-id)
+                      (event-field/selected-venue-ids event-id)
+                      {:lang (shared/current-lang request)}))))))
+
+(defn event-wizard-fields-save
+  "POST /events/:id/wizard/fields — replace the event's selected fields,
+  then continue to wizard step 3."
+  [request]
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            params (shared/form-params request)
+            ids-raw (get params "field-id")
+            venue-ids (->> (cond (nil? ids-raw) [] (string? ids-raw) [ids-raw] :else ids-raw)
+                          (keep shared/parse-event-id))]
+        (event-field/set-fields! event-id venue-ids)
+        (resp/redirect (str "/events/" event-id "/wizard/age-groups"))))))
+
+(defn event-wizard-fields-add
+  "POST /events/:id/wizard/fields/new — add a new field to the school's
+  pool and select it for this event, then stay on wizard step 2."
+  [request]
+  (shared/with-tenant-event
+    request
+    (fn [_user tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            params (shared/form-params request)
+            data (venue/parse-form params)
+            errors (venue/validate data)]
+        (if (seq errors)
+          (shared/html (views.events/event-wizard-fields-page
+                        event-id
+                        (venue/list-by-tenant tenant-id)
+                        (event-field/selected-venue-ids event-id)
+                        {:errors errors :lang (shared/current-lang request)}))
+          (let [v (venue/create! tenant-id data)]
+            (event-field/add! event-id (:venue/id v))
+            (resp/redirect (str "/events/" event-id "/wizard/fields"))))))))
+
+(defn event-wizard-age-groups-page
+  "GET /events/:id/wizard/age-groups — wizard step 3: select which age
+  groups are competing in this event."
+  [request]
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (shared/html (views.events/event-wizard-age-groups-page
+                    (:event/id ev)
+                    (set (:event/age-groups ev))
+                    {:lang (shared/current-lang request)})))))
+
+(defn event-wizard-age-groups-save
+  "POST /events/:id/wizard/age-groups — set the event's age groups, then
+  finish the wizard at the event detail page."
+  [request]
+  (shared/with-tenant-event
+    request
+    (fn [_user _tenant-id ev _m]
+      (let [event-id (:event/id ev)
+            params (shared/form-params request)
+            codes-raw (get params "age-group")
+            codes (->> (cond (nil? codes-raw) [] (string? codes-raw) [codes-raw] :else codes-raw)
+                      (map keyword))]
+        (event/set-age-groups! event-id codes)
         (resp/redirect (str "/events/" event-id))))))

@@ -253,7 +253,7 @@
     (is (= 200 (:status resp)))
     (is (re-find #"Required" (:body resp)))))
 
-(deftest event-create-success-redirects-home
+(deftest event-create-success-redirects-to-wizard-fields
   (let [{:keys [tenant-id uid]} (seed-tenant+user!)
         _ (sport-template/seed-templates!)
         resp (do-req :post "/events" uid
@@ -261,9 +261,11 @@
                       "event-start-at" "2026-08-01T09:00"
                       "event-end-at" "2026-08-01T17:00"
                       "event-visibility" "public"}
-                     tenant-id)]
+                     tenant-id)
+        [ev] (event/list-by-tenant tenant-id)]
     (is (= 302 (:status resp)))
-    (is (= "/" (get-in resp [:headers "Location"])))
+    (is (= (str "/events/" (:event/id ev) "/wizard/fields")
+           (get-in resp [:headers "Location"])))
     (is (= 1 (count (event/list-by-tenant tenant-id))))))
 
 (deftest home-shows-event-list

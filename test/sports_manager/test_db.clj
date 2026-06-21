@@ -13,7 +13,7 @@
   "clojure.test fixture. Starts a fresh in-memory XTDB node, runs the test,
   then stops and clears the node."
   [f]
-  (db/start!)
+  (db/start! nil {:in-memory? true})
   (try
     (f)
     (finally

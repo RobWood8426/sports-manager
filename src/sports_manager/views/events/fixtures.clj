@@ -3,7 +3,7 @@
   and the add-fixture form."
   (:require [clojure.string :as str]
             [sports-manager.i18n :as i18n]
-            [sports-manager.views.events.form :as form]
+            [sports-manager.views.events.wizard.details :as details]
             [sports-manager.views.shared :as shared]))
 
 (defn- fixture-codes-section
@@ -163,6 +163,6 @@
           [:option {:value ""} (i18n/t lang :fixtures/venue-none)]
           (for [v venues]
             [:option {:value (str (:venue/id v))} (:venue/name v)])]]
-        (form/datetime-field fixture-errors :fixture/start-at "fixture-start-at" "Start" nil)
-        (form/datetime-field fixture-errors :fixture/end-at "fixture-end-at" "End" nil)
+        (details/datetime-field fixture-errors :fixture/start-at "fixture-start-at" (i18n/t lang :eventform/start) nil)
+        (details/datetime-field fixture-errors :fixture/end-at "fixture-end-at" (i18n/t lang :eventform/end) nil)
         [:button.btn.btn-sm {:type "submit"} (i18n/t lang :fixtures/add-fixture)]]]]]))

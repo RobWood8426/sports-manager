@@ -1,5 +1,5 @@
-(ns sports-manager.views.events.form
-  "Create-event form."
+(ns sports-manager.views.events.wizard.details
+  "Event creation wizard — step 1: basic details."
   (:require [sports-manager.i18n :as i18n]
             [sports-manager.views.shared :as shared]))
 
@@ -13,7 +13,10 @@
       (.format fmt d))))
 
 (defn datetime-field
-  "A datetime-local input. Pre-fills `value` (a Date or already-formatted string) when provided."
+  "A datetime input, enhanced client-side by flatpickr (see
+  resources/public/js/datetime-picker.js) — plain text with the
+  \"yyyy-MM-ddTHH:mm\" format as a JS-free fallback. Pre-fills `value` (a
+  Date or already-formatted string) when provided."
   [errors field-key field-name label value]
   (let [str-val (if (instance? java.util.Date value)
                   (format-datetime-local value)
@@ -22,14 +25,20 @@
      [:label.label
       [:span.label-text label
        [:span.text-error " *"]]]
-     [:input.input.input-bordered.w-full
-      (cond-> {:id field-name :name field-name :type "datetime-local"}
+     [:input.input.input-bordered.w-full.flatpickr-datetime
+      (cond-> {:id field-name :name field-name :type "text"
+               :autocomplete "off" :placeholder "YYYY-MM-DD HH:mm"}
         str-val (assoc :value str-val))]
      (when-let [err (get errors field-key)]
        [:label.label [:span.label-text-alt.text-error err]])]))
 
+(defn step-indicator
+  "A simple \"Step N of 3\" line shared by all wizard pages."
+  [step lang]
+  [:p.text-sm.opacity-60.mb-4 (i18n/t lang :eventform/step-label step)])
+
 (defn event-new-form
-  "Create-event form."
+  "Create-event wizard, step 1: name, schedule, access/visibility, sports."
   [all-sports selected-codes & [{:keys [errors values lang]
                                  :or {errors {} values {} lang "en"}}]]
   (let [tr (fn [k] (i18n/t lang k))
@@ -40,10 +49,11 @@
         cur-access (some-> (:event/access-method values) name)
         cur-lang (i18n/normalize-lang (:event/language values))]
     (shared/doc (tr :eventform/page-title) {:active :events :lang lang}
-                [:nav.flex.flex-wrap.gap-2.text-sm.mb-6.pb-4.border-b.border-base-300.items-center
+                [:nav.flex.flex-wrap.gap-2.text-sm.mb-2.pb-4.border-b.border-base-300.items-center
                  [:a.opacity-60.hover:opacity-100.transition-opacity {:href "/"} (tr :eventform/home-link)]
                  [:span.opacity-30 "/"]
                  [:strong (tr :eventform/breadcrumb)]]
+                (step-indicator 1 lang)
                 [:form {:method "post" :action "/events"}
                  (shared/csrf-field)
                  [:div.flex.flex-col.gap-6
@@ -68,8 +78,8 @@
                   [:div
                    [:h2.text-base.font-semibold.mb-3 (tr :eventform/schedule)]
                    [:div.flex.flex-wrap.gap-3
-                    (datetime-field errors :event/start-at "event-start-at" "Start" (get values :event/start-at))
-                    (datetime-field errors :event/end-at "event-end-at" "End" (get values :event/end-at))]]
+                    (datetime-field errors :event/start-at "event-start-at" (tr :eventform/start) (get values :event/start-at))
+                    (datetime-field errors :event/end-at "event-end-at" (tr :eventform/end) (get values :event/end-at))]]
                   [:div
                    [:h2.text-base.font-semibold.mb-3 (tr :eventform/access-visibility)]
                    [:div.flex.flex-wrap.gap-3
@@ -90,13 +100,13 @@
                       [:option (cond-> {:value "public-link"} (= cur-access "public-link") (assoc :selected true)) (tr :eventform/access-public-link)]
                       [:option (cond-> {:value "code-gated"} (= cur-access "code-gated") (assoc :selected true)) (tr :eventform/access-code-gated)]]]
                     [:div.form-control
-                     [:label.label [:span.label-text (i18n/t "en" :event/language-label)]]
+                     [:label.label [:span.label-text (tr :event/language-label)]]
                      [:select.select.select-bordered
                       {:id "event-language" :name "event-language"}
                       (for [code i18n/supported]
                         [:option (cond-> {:value code} (= code cur-lang) (assoc :selected true))
                          (get i18n/lang-names code code)])]
-                     [:label.label [:span.label-text-alt.opacity-60 (i18n/t "en" :event/language-hint)]]]]]
+                     [:label.label [:span.label-text-alt.opacity-60 (tr :event/language-hint)]]]]]
                   (when (seq all-sports)
                     [:div
                      [:h2.text-base.font-semibold.mb-1 (tr :eventform/sports)]
@@ -111,4 +121,4 @@
                                      checked? (assoc :checked true))]
                            [:span.text-sm (:sport-template/name t)]]))]])
                   [:div
-                   [:button.btn.btn-primary {:type "submit"} (tr :eventform/save-draft)]]]])))
+                   [:button.btn.btn-primary {:type "submit"} (tr :eventform/next)]]]])))

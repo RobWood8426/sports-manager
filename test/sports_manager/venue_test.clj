@@ -1,9 +1,7 @@
 (ns sports-manager.venue-test
-  "Tests for SPO-35 — venue management per event."
+  "Tests for SPO-35 — venue (field) pool owned by the tenant/school."
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [sports-manager.db :as db]
-            [sports-manager.event :as event]
-            [sports-manager.sport-template :as st]
             [sports-manager.test-db :as test-db]
             [sports-manager.venue :as venue])
   (:import java.util.UUID))
@@ -15,19 +13,9 @@
 ;; ---------------------------------------------------------------------------
 
 (defn- seed! []
-  (st/seed-templates!)
-  (let [tid (UUID/randomUUID)
-        uid "actor"]
-    (db/put-many! [{:xt/id tid :tenant/id tid :tenant/name "Test School" :tenant/status :active}
-                   {:xt/id uid :user/firebase-uid uid :user/email "a@x.com" :user/status :active}])
-    (let [ev (event/create! tid uid
-                            {:event/name "Sports Day"
-                             :event/start-at #inst "2026-09-01T08:00"
-                             :event/end-at #inst "2026-09-01T18:00"
-                             :event/visibility :event.visibility/public
-                             :event/access-method :event.access/public-link}
-                            #{:sport/rugby})]
-      {:tenant-id tid :event-id (:event/id ev) :uid uid})))
+  (let [tid (UUID/randomUUID)]
+    (db/put! {:xt/id tid :tenant/id tid :tenant/name "Test School" :tenant/status :active})
+    {:tenant-id tid}))
 
 ;; ---------------------------------------------------------------------------
 ;; create! / find-by-id
@@ -35,12 +23,18 @@
 
 (deftest create-returns-entity
   (testing "create! returns a venue entity with the provided fields"
-    (let [{:keys [event-id]} (seed!)
-          v (venue/create! event-id {:venue/name "Main Field"
-                                     :venue/type :venue.type/field})]
+    (let [{:keys [tenant-id]} (seed!)
+          v (venue/create! tenant-id {:venue/name "Main Field"
+                                      :venue/type :venue.type/field})]
       (is (uuid? (:venue/id v)))
       (is (= "Main Field" (:venue/name v)))
       (is (= :venue.type/field (:venue/type v))))))
+
+(deftest create-throws-for-unknown-tenant
+  (testing "create! throws ex-info when the tenant does not exist"
+    (is (thrown-with-msg? clojure.lang.ExceptionInfo #"Tenant not found"
+                          (venue/create! (UUID/randomUUID) {:venue/name "X"
+                                                            :venue/type :venue.type/field})))))
 
 (deftest find-by-id-returns-nil-for-unknown
   (testing "find-by-id returns nil for a non-existent UUID"
@@ -49,55 +43,50 @@
 
 (deftest find-by-id-round-trips
   (testing "find-by-id retrieves a venue just created"
-    (let [{:keys [event-id]} (seed!)
-          v (venue/create! event-id {:venue/name "Court 1"
-                                     :venue/type :venue.type/court})]
+    (let [{:keys [tenant-id]} (seed!)
+          v (venue/create! tenant-id {:venue/name "Court 1"
+                                      :venue/type :venue.type/court})]
       (is (= (:venue/id v)
              (:venue/id (venue/find-by-id (:venue/id v))))))))
 
 ;; ---------------------------------------------------------------------------
-;; list-by-event
+;; list-by-tenant
 ;; ---------------------------------------------------------------------------
 
-(deftest list-by-event-empty
-  (testing "list-by-event returns empty seq when no venues exist"
-    (let [{:keys [event-id]} (seed!)]
-      (is (empty? (venue/list-by-event event-id))))))
+(deftest list-by-tenant-empty
+  (testing "list-by-tenant returns empty seq when no venues exist"
+    (let [{:keys [tenant-id]} (seed!)]
+      (is (empty? (venue/list-by-tenant tenant-id))))))
 
-(deftest list-by-event-returns-all-venues
-  (testing "list-by-event returns all venues for an event"
-    (let [{:keys [event-id]} (seed!)
-          _ (venue/create! event-id {:venue/name "Pool" :venue/type :venue.type/pool})
-          _ (venue/create! event-id {:venue/name "Track" :venue/type :venue.type/track})
-          vs (venue/list-by-event event-id)]
+(deftest list-by-tenant-returns-all-venues
+  (testing "list-by-tenant returns all venues for a tenant"
+    (let [{:keys [tenant-id]} (seed!)
+          _ (venue/create! tenant-id {:venue/name "Pool" :venue/type :venue.type/pool})
+          _ (venue/create! tenant-id {:venue/name "Track" :venue/type :venue.type/track})
+          vs (venue/list-by-tenant tenant-id)]
       (is (= 2 (count vs)))
       (is (every? :venue/name vs)))))
 
-(deftest list-by-event-sorted-by-order-then-name
+(deftest list-by-tenant-sorted-by-order-then-name
   (testing "venues are sorted by display-order ascending, then name"
-    (let [{:keys [event-id]} (seed!)
-          _ (venue/create! event-id {:venue/name "B Field" :venue/type :venue.type/field
-                                     :venue/display-order 2})
-          _ (venue/create! event-id {:venue/name "A Field" :venue/type :venue.type/field
-                                     :venue/display-order 1})
-          _ (venue/create! event-id {:venue/name "No Order" :venue/type :venue.type/court})
-          vs (venue/list-by-event event-id)
+    (let [{:keys [tenant-id]} (seed!)
+          _ (venue/create! tenant-id {:venue/name "B Field" :venue/type :venue.type/field
+                                      :venue/display-order 2})
+          _ (venue/create! tenant-id {:venue/name "A Field" :venue/type :venue.type/field
+                                      :venue/display-order 1})
+          _ (venue/create! tenant-id {:venue/name "No Order" :venue/type :venue.type/court})
+          vs (venue/list-by-tenant tenant-id)
           names (map :venue/name vs)]
       (is (= "A Field" (first names)))
       (is (= "B Field" (second names))))))
 
-(deftest list-by-event-isolated-across-events
-  (testing "venues from one event are not returned for another"
-    (let [{:keys [event-id tenant-id uid]} (seed!)
-          ev2 (event/create! tenant-id uid
-                             {:event/name "Other Event"
-                              :event/start-at #inst "2026-10-01T08:00"
-                              :event/end-at #inst "2026-10-01T18:00"
-                              :event/visibility :event.visibility/public
-                              :event/access-method :event.access/public-link}
-                             #{:sport/rugby})]
-      (venue/create! event-id {:venue/name "Pitch 1" :venue/type :venue.type/pitch})
-      (is (empty? (venue/list-by-event (:event/id ev2)))))))
+(deftest list-by-tenant-isolated-across-tenants
+  (testing "venues from one tenant are not returned for another"
+    (let [{:keys [tenant-id]} (seed!)
+          other-tid (UUID/randomUUID)]
+      (db/put! {:xt/id other-tid :tenant/id other-tid :tenant/name "Other School" :tenant/status :active})
+      (venue/create! tenant-id {:venue/name "Pitch 1" :venue/type :venue.type/pitch})
+      (is (empty? (venue/list-by-tenant other-tid))))))
 
 ;; ---------------------------------------------------------------------------
 ;; validate / parse-form
@@ -153,8 +142,8 @@
 
 (deftest update-changes-name
   (testing "update! changes the venue name"
-    (let [{:keys [event-id]} (seed!)
-          v (venue/create! event-id {:venue/name "Old Name" :venue/type :venue.type/field})
+    (let [{:keys [tenant-id]} (seed!)
+          v (venue/create! tenant-id {:venue/name "Old Name" :venue/type :venue.type/field})
           vid (:venue/id v)
           updated (venue/update! vid {:venue/name "New Name"})]
       (is (= "New Name" (:venue/name updated))))))
@@ -171,8 +160,8 @@
 
 (deftest delete-removes-venue
   (testing "delete! removes the venue so find-by-id returns nil"
-    (let [{:keys [event-id]} (seed!)
-          v (venue/create! event-id {:venue/name "Gone" :venue/type :venue.type/hall})
+    (let [{:keys [tenant-id]} (seed!)
+          v (venue/create! tenant-id {:venue/name "Gone" :venue/type :venue.type/hall})
           vid (:venue/id v)]
       (venue/delete! vid)
       (is (nil? (venue/find-by-id vid))))))
@@ -184,10 +173,10 @@
                           (venue/delete! (UUID/randomUUID))))))
 
 (deftest delete-does-not-affect-other-venues
-  (testing "deleting one venue does not remove others in the same event"
-    (let [{:keys [event-id]} (seed!)
-          v1 (venue/create! event-id {:venue/name "Keep" :venue/type :venue.type/field})
-          v2 (venue/create! event-id {:venue/name "Remove" :venue/type :venue.type/court})]
+  (testing "deleting one venue does not remove others in the same tenant"
+    (let [{:keys [tenant-id]} (seed!)
+          v1 (venue/create! tenant-id {:venue/name "Keep" :venue/type :venue.type/field})
+          v2 (venue/create! tenant-id {:venue/name "Remove" :venue/type :venue.type/court})]
       (venue/delete! (:venue/id v2))
-      (is (= 1 (count (venue/list-by-event event-id))))
+      (is (= 1 (count (venue/list-by-tenant tenant-id))))
       (is (= "Keep" (:venue/name (venue/find-by-id (:venue/id v1))))))))

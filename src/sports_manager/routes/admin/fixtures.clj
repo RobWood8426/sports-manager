@@ -4,6 +4,7 @@
             [ring.util.response :as resp]
             [sports-manager.audit :as audit]
             [sports-manager.event :as event]
+            [sports-manager.event-field :as event-field]
             [sports-manager.final-score :as final-score]
             [sports-manager.fixture :as fixture]
             [sports-manager.fixture-export :as fixture-export]
@@ -12,7 +13,6 @@
             [sports-manager.score :as score]
             [sports-manager.scorekeeper-code :as scode]
             [sports-manager.sport-template :as sport-template]
-            [sports-manager.venue :as venue]
             [sports-manager.views.events :as views.events]
             [sports-manager.views.fixtures :as views.fixtures]))
 
@@ -93,7 +93,7 @@
                                                   (fixture/list-by-event event-id)
                                                   (event-detail-sports ev)
                                                   {:fixture-errors errors
-                                                   :venues (venue/list-by-event event-id)
+                                                   :venues (event-field/list-for-event event-id)
                                                    :lang (shared/current-lang request)}))
           (do
             (fixture/create! event-id (:user/firebase-uid current-user) parsed)

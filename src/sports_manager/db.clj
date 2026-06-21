@@ -5,7 +5,9 @@
   :user/firebase-uid, :sport-template/code, etc.) IS its :xt/id. Refs store
   the target's :xt/id value directly — no numeric eids.
 
-  Always RocksDB-backed (dev and prod) under SM_XTDB_DATA_DIR (default: data/xtdb)."
+  RocksDB-backed under SM_XTDB_DATA_DIR (default: data/xtdb) in dev and prod.
+  Pass {:in-memory? true} to start! for an isolated in-memory node — used by
+  the test suite so test runs never touch the dev data dir or its lock file."
   (:require [clojure.tools.logging :as log]
             [sports-manager.config :as config]
             [xtdb.api :as xt])
@@ -18,13 +20,18 @@
 ;; Node configuration
 ;; ---------------------------------------------------------------------------
 
-(defn- node-config []
-  (let [dir config/xtdb-data-dir
-        kv (fn [sub] {:xtdb/module 'xtdb.rocksdb/->kv-store
-                      :db-dir (str dir "/" sub)})]
-    {:xtdb/tx-log {:kv-store (kv "tx-log")}
-     :xtdb/document-store {:kv-store (kv "docs")}
-     :xtdb/index-store {:kv-store (kv "index")}}))
+(defn- node-config [{:keys [in-memory?]}]
+  (if in-memory?
+    (let [kv {:xtdb/module 'xtdb.mem-kv/->kv-store}]
+      {:xtdb/tx-log {:kv-store kv}
+       :xtdb/document-store {:kv-store kv}
+       :xtdb/index-store {:kv-store kv}})
+    (let [dir config/xtdb-data-dir
+          kv (fn [sub] {:xtdb/module 'xtdb.rocksdb/->kv-store
+                        :db-dir (str dir "/" sub)})]
+      {:xtdb/tx-log {:kv-store (kv "tx-log")}
+       :xtdb/document-store {:kv-store (kv "docs")}
+       :xtdb/index-store {:kv-store (kv "index")}})))
 
 ;; ---------------------------------------------------------------------------
 ;; Lifecycle
@@ -32,12 +39,16 @@
 
 (defn start!
   "Start the XTDB node. Idempotent. Optional seed-fns (zero-arg) run once
-  after node start -- used to seed reference data without circular deps."
-  ([] (start! nil))
-  ([seed-fns]
+  after node start -- used to seed reference data without circular deps.
+  Optional opts map supports {:in-memory? true} for a throwaway node."
+  ([] (start! nil nil))
+  ([seed-fns] (start! seed-fns nil))
+  ([seed-fns opts]
    (when (nil? @node)
-     (reset! node (xt/start-node (node-config)))
-     (log/info "Started XTDB node (rocksdb)" config/xtdb-data-dir)
+     (reset! node (xt/start-node (node-config opts)))
+     (log/info "Started XTDB node" (if (:in-memory? opts)
+                                      "(in-memory)"
+                                      (str "(rocksdb) " config/xtdb-data-dir)))
      (doseq [f seed-fns] (f)))
    @node))
 

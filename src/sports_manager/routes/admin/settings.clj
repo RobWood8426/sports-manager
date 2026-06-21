@@ -3,10 +3,13 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [ring.util.response :as resp]
+            [sports-manager.event-field :as event-field]
+            [sports-manager.i18n :as i18n]
             [sports-manager.routes.shared :as shared]
             [sports-manager.school :as school]
             [sports-manager.session :as session]
             [sports-manager.storage :as storage]
+            [sports-manager.venue :as venue]
             [sports-manager.views.admin :as views.admin]))
 
 (defn settings-page
@@ -16,6 +19,7 @@
     (if-not tenant-id
       user-or-redirect
       (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
+                                                (venue/list-by-tenant tenant-id)
                                                 {:lang (shared/current-lang request)})))))
 
 (defn profile-submit
@@ -34,6 +38,7 @@
         (if (seq errors)
           (shared/html (views.admin/school-settings
                         (merge (school/find-by-id tenant-id) profile)
+                        (venue/list-by-tenant tenant-id)
                         {:errors errors :lang (shared/current-lang request)}))
           (do
             (school/update-profile! tenant-id profile)
@@ -54,11 +59,13 @@
         (cond
           (or (nil? file-part) (str/blank? (:filename file-part "")))
           (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
+                                                    (venue/list-by-tenant tenant-id)
                                                     {:errors {:file "Please choose an image."}
                                                      :lang (shared/current-lang request)}))
 
           (seq errors)
           (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
+                                                    (venue/list-by-tenant tenant-id)
                                                     {:errors errors
                                                      :lang (shared/current-lang request)}))
 
@@ -98,6 +105,50 @@
         (when logo-key (storage/delete-object storage/default-storage logo-key))
         (-> (resp/redirect "/")
             (session/clear-active-tenant))))))
+
+(defn venue-create
+  "POST /school/venues — add a new field to the school's pool."
+  [request]
+  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
+    (if-not tenant-id
+      user-or-redirect
+      (let [params (shared/form-params request)
+            data (venue/parse-form params)
+            errors (venue/validate data)]
+        (if (seq errors)
+          (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
+                                                    (venue/list-by-tenant tenant-id)
+                                                    {:errors errors
+                                                     :lang (shared/current-lang request)}))
+          (do
+            (venue/create! tenant-id data)
+            (resp/redirect "/school/settings")))))))
+
+(defn venue-delete
+  "POST /school/venues/:vid/delete — permanently remove a field from the
+  school's pool. Refuses if any event still has the field selected, since
+  XTDB doesn't enforce referential integrity and a dangling reference would
+  silently disappear from that event's field list."
+  [request]
+  (let [[user-or-redirect tenant-id _] (shared/require-tenant request)]
+    (if-not tenant-id
+      user-or-redirect
+      (let [venue-id (shared/parse-event-id (get-in request [:path-params :vid]))]
+        (cond
+          (or (nil? venue-id) (not (venue/find-by-id venue-id)))
+          (resp/redirect "/school/settings")
+
+          (event-field/in-use? venue-id)
+          (shared/html (views.admin/school-settings (school/find-by-id tenant-id)
+                                                    (venue/list-by-tenant tenant-id)
+                                                    {:errors {:field-in-use (i18n/t (shared/current-lang request)
+                                                                                    :settings/field-in-use-error)}
+                                                     :lang (shared/current-lang request)}))
+
+          :else
+          (do
+            (venue/delete! venue-id)
+            (resp/redirect "/school/settings")))))))
 
 (defn media
   "GET /media/:tenant-id/:kind/:filename — serve an uploaded object.

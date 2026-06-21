@@ -202,10 +202,63 @@
   (when-let [k (:tenant/logo-key tenant)]
     (str "/media/" k)))
 
+(def ^:private venue-type-keys
+  {:venue.type/field :detail/venue-field
+   :venue.type/court :detail/venue-court
+   :venue.type/pool :detail/venue-pool
+   :venue.type/track :detail/venue-track
+   :venue.type/pitch :detail/venue-pitch
+   :venue.type/astro :detail/venue-astro
+   :venue.type/hall :detail/venue-hall
+   :venue.type/other :detail/venue-other})
+
+(defn- fields-section [venues errors tr]
+  [:section.mb-10
+   [:h3.text-xl.font-semibold.mb-4 (tr :settings/fields-section)]
+   [:p.text-sm.opacity-60.mb-4 (tr :settings/fields-hint)]
+   (if (seq venues)
+     [:div.flex.flex-col.gap-2.mb-4
+      (for [v venues]
+        (let [type-label (some-> (:venue/type v) venue-type-keys tr)]
+          [:div.ss-card.p-3.flex.items-center.justify-between.gap-3
+           [:div.flex.items-center.gap-2
+            [:span.text-sm (:venue/name v)]
+            (when type-label [:span.text-xs.opacity-50 type-label])]
+           [:form {:method "post" :action (str "/school/venues/" (:venue/id v) "/delete")}
+            (shared/csrf-field)
+            [:button.btn.btn-xs.btn-ghost.text-error
+             {:type "submit" :onclick (str "return confirm('" (tr :settings/delete-field-confirm) "')")}
+             "✕"]]]))]
+     [:p.opacity-50.text-sm.mb-4 (tr :settings/no-fields-yet)])
+   (when-let [err (:field-in-use errors)]
+     [:div.alert.alert-error.mb-4 [:span err]])
+   [:details.collapse.bg-base-200.rounded-lg
+    [:summary.collapse-title.text-sm.font-medium.cursor-pointer (tr :settings/add-field-heading)]
+    [:div.collapse-content
+     [:form {:method "post" :action "/school/venues"}
+      (shared/csrf-field)
+      [:div.flex.flex-col.gap-3
+       [:div.form-control
+        [:label.label [:span.label-text (tr :detail/venue-name) " " [:span.text-error "*"]]]
+        [:input.input.input-bordered.w-full
+         {:id "venue-name" :name "venue-name" :type "text"
+          :placeholder (tr :detail/venue-name-placeholder)}]
+        (when-let [err (get errors :venue/name)]
+          [:label.label [:span.label-text-alt.text-error err]])]
+       [:div.form-control
+        [:label.label [:span.label-text (tr :detail/venue-type) " " [:span.text-error "*"]]]
+        [:select.select.select-bordered {:id "venue-type" :name "venue-type"}
+         (for [[type-kw label-key] venue-type-keys]
+           [:option {:value (subs (str type-kw) 1)} (tr label-key)])]
+        (when-let [err (get errors :venue/type)]
+          [:label.label [:span.label-text-alt.text-error err]])]
+       [:button.btn.btn-sm {:type "submit"} (tr :detail/add-venue-button)]]]]]])
+
 (defn school-settings
-  "School settings page: profile, brand colours, and logo upload (SPO-23).
-  `tenant` is the tenant entity map; `opts` may carry {:errors {...}}."
-  [tenant & [{:keys [errors lang] :or {errors {} lang "en"}}]]
+  "School settings page: profile, brand colours, field pool, and logo upload
+  (SPO-23). `tenant` is the tenant entity map; `venues` is the tenant's field
+  pool (sports-manager.venue/list-by-tenant); `opts` may carry {:errors {...}}."
+  [tenant venues & [{:keys [errors lang] :or {errors {} lang "en"}}]]
   (let [primary (or (:tenant/brand-primary tenant) "")
         secondary (or (:tenant/brand-secondary tenant) "")
         logo-url (logo-media-url tenant)
@@ -262,6 +315,8 @@
                      [:span.text-sm.opacity-60 (if (str/blank? secondary) (tr :settings/colour-default) secondary)]]]]
                   [:div.mt-4
                    [:button.btn.btn-primary {:type "submit"} (tr :settings/save)]]]]
+
+                (fields-section venues errors tr)
 
                 [:section.mb-10
                  [:h3.text-xl.font-semibold.mb-4 (tr :settings/logo-section)]
